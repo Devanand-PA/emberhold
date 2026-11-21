@@ -10158,14 +10158,62 @@ window.UI = (() => {
     try { if (("ontouchstart" in window) && Math.min(window.innerWidth || 9999, window.innerHeight || 9999) < 700) return true; } catch (e) { }
     return false;
   }
+  function isTauriApp() {
+    try { return !!(window.__TAURI_INTERNALS__ || (window.EmberholdDesktop && window.EmberholdDesktop.isTauri)); } catch (e) { return false; }
+  }
+  async function getFullscreenState() {
+    try {
+      if (window.EmberholdDesktop && typeof window.EmberholdDesktop.isFullscreen === "function") {
+        return !!await window.EmberholdDesktop.isFullscreen();
+      }
+    } catch (e) { }
+    try { return !!document.fullscreenElement; } catch (e2) { }
+    return false;
+  }
+  async function setFullscreenState(on) {
+    try {
+      if (window.EmberholdDesktop && typeof window.EmberholdDesktop.setFullscreen === "function") {
+        await window.EmberholdDesktop.setFullscreen(!!on);
+        return true;
+      }
+    } catch (e) { }
+    try {
+      if (on) {
+        const el = document.documentElement;
+        if (el.requestFullscreen) await el.requestFullscreen();
+        else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+        else return false;
+      } else if (document.fullscreenElement) {
+        await document.exitFullscreen();
+      }
+      return true;
+    } catch (e2) { }
+    return false;
+  }
+  async function toggleFullscreenState() {
+    try {
+      if (window.EmberholdDesktop && typeof window.EmberholdDesktop.toggleFullscreen === "function") {
+        return !!await window.EmberholdDesktop.toggleFullscreen();
+      }
+    } catch (e) { }
+    const cur = await getFullscreenState();
+    const ok = await setFullscreenState(!cur);
+    if (!ok) throw new Error("fullscreen toggle failed");
+    return !cur;
+  }
   function refreshFsUI() {
     // fullscreen button label + state line (settings menu only)
-    try {
-      const b = $("fsBtn"), st = $("fsState");
-      const supported = !!(document.fullscreenEnabled || (document.documentElement && document.documentElement.webkitRequestFullscreen));
-      if (b) b.textContent = document.fullscreenElement ? "⛶ Exit fullscreen" : "⛶ Go fullscreen";
-      if (st) st.textContent = document.fullscreenElement ? "on" : (supported ? "" : "not supported here");
-    } catch (e) { }
+    (async () => {
+      try {
+        const b = $("fsBtn"), st = $("fsState");
+        const tauri = isTauriApp();
+        const domSupported = !!(document.fullscreenEnabled || (document.documentElement && document.documentElement.webkitRequestFullscreen));
+        const supported = tauri || domSupported;
+        const on = await getFullscreenState();
+        if (b) b.textContent = on ? "⛶ Exit fullscreen" : "⛶ Go fullscreen";
+        if (st) st.textContent = on ? "on" : (supported ? "" : "not supported here");
+      } catch (e) { }
+    })();
   }
   function applyTouchControls() {
     const mode = touchSetting();
@@ -10178,6 +10226,7 @@ window.UI = (() => {
     // touch layout swap: mini profile + diamond cluster + drag-to-cast CSS
     // all key off body.touch (desktop keeps the full panel + plain buttons).
     try { document.body.classList.toggle("touch", !!show); } catch (e) { }
+    try { document.body.classList.toggle("tauri", isTauriApp()); } catch (e) { }
     try { updateMiniProfile(); } catch (e) { }
     try { refreshFsUI(); } catch (e) { }
     try { layoutTicker(); } catch (e) { }
@@ -11759,27 +11808,25 @@ window.UI = (() => {
       toast("📛 You are now " + clean + ".", 3000);
     };
     if ($("persistBtn")) $("persistBtn").onclick = () => requestPersistentStorage(true);
-    // fullscreen button (touch / mobile settings only — desktop gets the F11 note)
+    // fullscreen button (touch / mobile settings, and always in Tauri)
     if ($("fsBtn") && !$("fsBtn")._wired) {
       $("fsBtn")._wired = true;
       $("fsBtn").onclick = async () => {
         try {
-          if (document.fullscreenElement) {
-            try { await document.exitFullscreen(); } catch (e) { }
-            toast("⛶ Left fullscreen.", 2000);
-          } else {
-            const el = document.documentElement;
-            if (el.requestFullscreen) await el.requestFullscreen();
-            else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
-            else { toast("📱 This browser can't fullscreen the page — Add to Home Screen gives the full view.", 3500); return; }
-            toast("⛶ Fullscreen on.", 2000);
-          }
-        } catch (e) { toast("📱 Fullscreen was blocked — try again, or Add to Home Screen.", 3500); }
+          const before = await getFullscreenState();
+          const after = await toggleFullscreenState();
+          const on = (typeof after === "boolean") ? after : !before;
+          toast(on ? "⛶ Fullscreen on." : "⛶ Left fullscreen.", 2000);
+        } catch (e) {
+          toast(isTauriApp() ? "⛶ Could not toggle fullscreen." : "📱 Fullscreen was blocked — try again, or Add to Home Screen.", 3500);
+        }
         try { refreshFsUI(); } catch (e2) { }
       };
       if (!document._fsWired) {
         document._fsWired = true;
         document.addEventListener("fullscreenchange", () => { try { refreshFsUI(); } catch (e) { } });
+        window.addEventListener("resize", () => { try { refreshFsUI(); } catch (e) { } });
+        document.addEventListener("visibilitychange", () => { try { refreshFsUI(); } catch (e) { } });
       }
     }
     if ($("menuHelpBtn")) $("menuHelpBtn").onclick = () => { toggleMenu(false); $("helpModal").hidden = false; };
@@ -11818,12 +11865,23 @@ window.UI = (() => {
         try { fitHotbar(); } catch (e) { }
         try { const m = $("mapModal"); if (m && !m.hidden) fitMapCanvas(); } catch (e) { }
       });
-      // Android default-fullscreen: browsers only grant fullscreen from a
+      // F11 toggles fullscreen (especially important in the Tauri app, which runs fullscreen by default).
+      window.addEventListener("keydown", (e) => {
+        try {
+          if (e.key !== "F11" || e.repeat) return;
+          e.preventDefault();
+          (async () => {
+            try { await toggleFullscreenState(); } catch (err) { }
+            try { refreshFsUI(); } catch (err2) { }
+          })();
+        } catch (err) { }
+      });
+      // Android default-fullscreen in browsers: browsers only grant fullscreen from a
       // user gesture, so the first tap anywhere auto-expands — the closest
-      // the platform allows to launching fullscreen.
+      // the platform allows to launching fullscreen. (Tauri controls fullscreen natively.)
       window.addEventListener("pointerdown", function fsAuto() {
         try {
-          if (/Android/i.test(navigator.userAgent || "") && !document.fullscreenElement) {
+          if (!isTauriApp() && /Android/i.test(navigator.userAgent || "") && !document.fullscreenElement) {
             const el = document.documentElement;
             const pr = el.requestFullscreen ? el.requestFullscreen() : null;
             if (pr && pr.catch) pr.catch(() => { });

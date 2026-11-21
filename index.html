@@ -126,9 +126,9 @@
   /* pushing the stick past the pad's own circle = sprint: gold ring + knob */
   #joyBase.sprinting { border-color: #ffd93d; box-shadow: 0 0 16px rgba(255,217,61,.8); }
   #joyBase.sprinting #joyKnob { background: rgba(255,217,61,.55); }
-  /* fullscreen: the button + touch hint only exist on mobile; desktop gets the F11 note */
+  /* fullscreen: button shown on touch devices and in the Tauri app */
   #fsBtn { display: none; }
-  body.touch #fsBtn { display: inline-block; }
+  body.touch #fsBtn, body.tauri #fsBtn { display: inline-block; }
   #fsNoteTouch { display: none; }
   body.touch #fsNoteTouch { display: block; }
   body.touch #fsNotePc { display: none; }
@@ -1698,7 +1698,7 @@ try {
         <label class="sidelabel" for="titleAutosaveSel">💾 Autosave</label>
         <select id="titleAutosaveSel" title="How often the game saves by itself. Manual saves (☰ → Save now, Save & title, slot switches, death) always still happen."><option value="0">Off (manual saves only)</option><option value="15">Every 15 seconds</option><option value="30">Every 30 seconds</option><option value="60">Every minute</option><option value="120">Every 2 minutes</option><option value="300">Every 5 minutes</option></select>
         <p class="sidehint">Theme, tutorial prompts + autosave can also be changed in-game via <b>☰</b>.</p>
-        <p class="sidehint">⌨️ Press <b>F11</b> to enter Fullscreen: it fills the screen without the browser hijacking the <span class="kbd">Esc</span> key (Esc opens the menu).</p>
+        <p class="sidehint">⌨️ Press <b>F11</b> to toggle fullscreen. In a browser this avoids hijacking <span class="kbd">Esc</span> (Esc opens the menu).</p>
       </aside>
     </div>
    </div>
@@ -2109,7 +2109,7 @@ try {
       <button id="fsBtn" class="ghost" style="margin:0">⛶ Go fullscreen</button>
       <span id="fsState" style="font-size:11px;opacity:0.7"></span>
     </div>
-    <p id="fsNotePc" style="font-size:11px;opacity:0.7;margin:4px 0 0">⌨️ Press <b>F11</b> to enter Fullscreen: it fills the screen without the browser hijacking the <span class="kbd">Esc</span> key (Esc opens the menu).</p>
+    <p id="fsNotePc" style="font-size:11px;opacity:0.7;margin:4px 0 0">⌨️ Press <b>F11</b> to toggle fullscreen. In a browser this avoids hijacking <span class="kbd">Esc</span> (Esc opens the menu).</p>
     <p id="fsNoteTouch" style="font-size:11px;opacity:0.7;margin:4px 0 0">📱 Tap the button for the full screen — rotate your phone sideways if you like.</p>
     <h3 class="secttl">👁️ Appearance</h3>
     <div class="soundrow">
