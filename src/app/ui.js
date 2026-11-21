@@ -12013,8 +12013,9 @@ window.UI = (() => {
     // open the browser gives IT the keyboard focus, so a key released in that
     // moment never sends the page its keyup — G.keys still says "held" and the
     // hero keeps walking that way. So: never let the menu open over the game
-    // (text fields keep theirs), never treat a non-left click as game input,
-    // and drop held input the instant a menu opens anywhere anyway.
+    // (text fields keep theirs) — right click is consumed as off-hand use by
+    // the mousedown handler — and drop held input the instant a menu opens
+    // anywhere anyway.
     window.addEventListener("contextmenu", (e) => {
       let allowMenu = false;
       try { allowMenu = !!(e.target && e.target.closest && e.target.closest("input,textarea,[contenteditable]")); } catch (err) { }
@@ -12044,7 +12045,17 @@ window.UI = (() => {
     window.addEventListener("mousedown", (e) => {
       if (e.target.closest("button,input,textarea,.modal,.hudbtn,#profileHud,#levelUpBanner,#notifLog,#minimapWrap,#placebox,#clockbox")) return;
       if (e.button === 1) { e.preventDefault(); return; } // no middle-click autoscroll over the game
-      if (e.button === 2) { e.preventDefault(); return; } // right click: menu is handled on contextmenu, never game input
+      if (e.button === 2) {
+        // Right-click uses the off-hand slot too — the Q action: spells/
+        // torches/throwables fire, weapons/shields (or empty) parry. The
+        // native menu never opens over the game, not even Shift+right-click:
+        // Shift doubles as the sprint key, so the browser must not steal it.
+        e.preventDefault();
+        if (!(window.UI && window.UI.isModalOpen && window.UI.isModalOpen())) {
+          try { window.Game.doOffhandUse(); } catch (e2) { }
+        }
+        return;
+      }
       if (e.button !== undefined && e.button !== 0) return; // left click only: attack / torch plant
       // torch planting: the next canvas click plants instead of attacking
       try {
@@ -12065,7 +12076,7 @@ window.UI = (() => {
     });
     window.addEventListener("mouseup", (e) => {
       // swallow the right-button release too: its default feeds the menu
-      // path (esp. Shift+right-click), never game input.
+      // path (the Shift+right-click hatch), never game input.
       try { if (e && e.button === 2) e.preventDefault(); } catch (err) { }
       G.mouse.down = false;
     });
