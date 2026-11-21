@@ -953,8 +953,14 @@ window.AIDirector = (() => {
       const fl = AF[o.role];
       if (fl && lv < fl) lv = Math.min(100, fl + ((Math.random() * 8) | 0));
     } catch (e) {}
-    const st = window.Entities.makeNpcStatBlock(lv, o.role, dist);
     const kit = window.CFG.ROLE_KIT[o.role] || window.CFG.ROLE_KIT.villager;
+    // style-aware body (Dec 2026): the kit's spells/steel bend the growth
+    // rates, so a scholar and a guard at the same frontier level grow apart.
+    // Main weapon + attire join the mix on every later level-up (see
+    // Items.npcLevelUp) once loadout has dressed them.
+    let st = null;
+    try { st = window.Entities.makeNpcStatBlock(lv, o.role, dist, { abilities: kit }); } catch (eSt) { st = null; }
+    if (!st) st = window.Entities.makeNpcStatBlock(lv, o.role, dist);
     // v18 dimension stamp: villagers belong to the world they were born in.
     let ndim = "surf";
     try {

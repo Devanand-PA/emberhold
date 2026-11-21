@@ -335,34 +335,22 @@ window.Quests = (() => {
       window.Sfx.coin();
       if (window.UI.renderQuests) window.UI.renderQuests();
     } catch (e) { }
-    if ((q.steps || []).every(x => x.done) && !q.rewardOffered) {
-      q.rewardOffered = true;
-      save();
-      try { if (window.UI.clearTutGuide) window.UI.clearTutGuide(); } catch (e) { }
-      try { if (window.UI.showTutorialReward) window.UI.showTutorialReward(); } catch (e) { }
-      return true;
-    }
-    // guided flow: after every lesson, reopen the quest log so the trainee
-    // sees what is left, with the spotlight arrow already on the next step.
+   if ((q.steps || []).every(x => x.done) && !q.rewardOffered) {
+     q.rewardOffered = true;
+     save();
+     try { if (window.UI.clearTutGuide) window.UI.clearTutGuide(); } catch (e) { }
+     try { if (window.UI.showTutorialReward) window.UI.showTutorialReward(); } catch (e) { }
+     return true;
+   }
+    // guided flow: stay in the game. The spotlight tip already names the next
+    // lesson, so never yank the quest log open here — the old 900ms reopen
+    // stole focus after EVERY step (even closing the pack mid-craft), which is
+    // why trainees felt trapped in the quest menu. The checklist stays one
+    // keypress away (J) and refreshTutGuide re-aims the arrow in place.
     try {
-      if (window.UI && window.UI.toggleQuests) {
-        // let the toast breathe for a beat, then show the log again
-        setTimeout(() => {
-          try {
-            const still = tutorialQuest(P());
-            if (!still || still.status !== "active" || still.id !== q.id) return;
-            // don't yank focus while another reward/modal took over
-            const rew = document.querySelector("#tutRewardModal");
-            if (rew && !rew.hidden) return;
-            // close the pack first so the log is actually on top
-            try { const im = document.querySelector("#invModal"); if (im && !im.hidden) im.hidden = true; } catch (e2) { }
-            window.UI.toggleQuests(true);
-            if (window.UI.refreshTutGuide) window.UI.refreshTutGuide();
-          } catch (e) { }
-        }, 900);
-      } else if (window.UI && window.UI.refreshTutGuide) window.UI.refreshTutGuide();
+      if (window.UI && window.UI.refreshTutGuide) window.UI.refreshTutGuide();
     } catch (e) { }
-    return true;
+   return true;
   }
   // Event hook for scripted lesson tracking.
   function onTutorialEvent(type) {
@@ -2041,10 +2029,90 @@ window.Quests = (() => {
     } catch (e) { }
   }
 
+  // ---------- ally quest sharing ----------
+  // An ally shares one of their quests; the recipient gets their OWN copy
+  // (fresh progress, new id, own reward roll) with the same grounds. Shared
+  // copies never report back (turnIn:false) so they always auto-complete —
+  // the giver may not exist on this machine, and stranding a "report" quest
+  // with nobody to report to would be worse than the errand. Progress then
+  // flows through the normal hooks (onKill/kcredit/loot) on both screens.
+  const SHARE_TYPES = { slay: 1, fetch: 1, clear: 1 };
+  async function acceptSharedQuest(sq, sharerName) {
+    try {
+      const p = P(); if (!p || !sq || sq.sys !== "v") return { ok: false, msg: "Bad share." };
+      if (active(p).length >= MAX_ACTIVE) return { ok: false, msg: `Quest log is full (${MAX_ACTIVE}). Finish one first.` };
+      const type = sq.type;
+      if (!SHARE_TYPES[type]) return { ok: false, msg: "That kind of quest can't be shared yet." };
+      const need = Math.max(1, Math.min(type === "slay" ? 10 : 6, Math.round(Number(sq.need) || 0) || 0));
+      if (!(need > 0)) return { ok: false, msg: "Bad share." };
+      let mobKind = null, itemId = null;
+      if (type === "slay") {
+        mobKind = String(sq.mobKind || "goblin").slice(0, 24);
+        try { if (!(window.CFG && window.CFG.MOB_TEMPLATES && window.CFG.MOB_TEMPLATES[mobKind])) mobKind = "goblin"; } catch (e) { mobKind = "goblin"; }
+      } else if (type === "fetch") {
+        itemId = String(sq.itemId || "herb").slice(0, 40);
+        try { if (!window.Items.ITEMS[itemId]) itemId = "mysterious_package"; } catch (e) { itemId = "mysterious_package"; }
+      }
+      const t = (sq.t && typeof sq.t === "object") ? sq.t : {};
+      const gx = Number(t.gx), gy = Number(t.gy);
+      if (!isFinite(gx) || !isFinite(gy) || Math.abs(gx) > 2000 || Math.abs(gy) > 2000) return { ok: false, msg: "Bad share." };
+      const place = String(sq.place || t.placeName || "").slice(0, 48);
+      try {
+        const dup = ensure(p).find(q => q && (q.status === "active" || q.status === "turnin") && q.type === type &&
+          (type === "slay" ? q.mobKind === mobKind : type === "fetch" ? q.itemId === itemId : true) &&
+          q.target && Math.abs((q.target.gx || 0) - gx) < 1 && Math.abs((q.target.gy || 0) - gy) < 1);
+        if (dup) return { ok: false, msg: "That quest is already in your log." };
+      } catch (e) {}
+      const diff = Math.max(1, Math.min(5, Math.round(Number(sq.diff) || 1)));
+      const story = String(sq.story || sq.desc || "A road shared between allies.").slice(0, 500);
+      const byName = String(sharerName || "An ally").slice(0, 24);
+      // giver: same seed, same folk — link up when they are around, else the
+      // sharer's name stands in (shared copies auto-complete, never report).
+      let giver = null;
+      try {
+        const gn = String((sq.giver && sq.giver.name) || "").slice(0, 40);
+        const gp = String((sq.giver && sq.giver.placeName) || "").slice(0, 48);
+        const npc = (gn && window.Game && window.Game.G) ? (window.Game.G.npcs || []).find(n => n && n.name === gn && !n.inParty) : null;
+        giver = npc ? { npcId: npc.id, name: npc.name, placeName: npc.placeName || gp || null }
+          : { npcId: null, name: gn || byName, placeName: gp || null };
+      } catch (e) {}
+      if (!giver) giver = { npcId: null, name: byName, placeName: null };
+      const q = {
+        id: "q" + (p.questSeq++), type,
+        title: String(sq.title || "A shared quest").slice(0, 48),
+        desc: `Shared by ${byName}.` + (sq.desc ? " " + String(sq.desc).slice(0, 160) : ""),
+        story, storyLog: [story], giver,
+        target: {
+          placeName: place || null, gx, gy,
+          cx: isFinite(Number(t.cx)) ? Number(t.cx) : null, cy: isFinite(Number(t.cy)) ? Number(t.cy) : null,
+          name: t.name ? String(t.name).slice(0, 48) : null,
+          dungeonId: t.dungeonId ? String(t.dungeonId).slice(0, 48) : null,
+        },
+        need, have: 0, turnIn: false,
+        diff, status: "active", createdAt: Date.now(), sharedBy: byName,
+      };
+      if (type === "slay") q.mobKind = mobKind;
+      if (type === "fetch") q.itemId = itemId;
+      q.reward = rewardFor(p, diff);
+      if (type === "fetch") {
+        if (!(await placeQuestCache(q))) return { ok: false, msg: "The trail went cold — no cache ground." };
+      }
+      ensure(p).push(q);
+      save();
+      try {
+        window.UI.toast(`📜 Shared quest accepted: ${q.title} — ${objectiveText(q)}`, 5500);
+        if (window.UI.showQuestBanner) window.UI.showQuestBanner("📜", "Shared quest: " + q.title, objectiveText(q) + "  ·  🎁 " + rewardText(q.reward));
+        window.Sfx.coin(); window.UI.updateHUD();
+        if (window.UI.renderQuests) window.UI.renderQuests();
+      } catch (e) {}
+      return { ok: true, quest: q };
+    } catch (e) { return { ok: false, msg: "Couldn't take it up." }; }
+  }
+
   return {
     ensure, active, completedQuests, abandonedQuests, get, objectiveText, statusText, targetPos, distToTarget,
     storyHeardSoFar, heroSummary, giverSummary,
-    offerFor, acceptOffer, abandon, turnIn, pendingTurnIn, preTalk,
+    offerFor, acceptOffer, acceptSharedQuest, abandon, turnIn, pendingTurnIn, preTalk,
     onKill, onTakeCache, onTalk, onBossSpawn, onLootDrops, onTame,
     tick, complete, rewardFor, rewardText, startTutorial, tutorialQuest, tutorialSteps, onTutorialEvent, tutorialChoose, TUT_REWARD_CHOICES,
     tutorialGuideFor, tutorialCurrentStep, tutorialSpellKey, ensureTutorialTome, migrateTutorialQuest,

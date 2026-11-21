@@ -1489,8 +1489,8 @@ window.Game = (() => {
             if (!Number.isFinite(+n.maxHp) || (+n.maxHp) < 1) {
               try {
                 if (window.Entities && window.Entities.makeNpcStatBlock) {
-                  const st2 = window.Entities.makeNpcStatBlock(n.lv || 1, n.role, 0);
-                  if (st2) { n.maxHp = st2.maxHp; n.maxMp = st2.maxMp; n.atk = st2.atk; n.matk = st2.matk; n.def = st2.def; }
+                  const st2 = window.Entities.makeNpcStatBlock(n.lv || 1, n.role, 0, { abilities: n.abilities, weapon: (n.equipment && n.equipment.weapon) || null, armor: (n.equipment && n.equipment.armor) || null });
+                  if (st2) { n.maxHp = st2.maxHp; n.maxMp = st2.maxMp; n.atk = st2.atk; n.matk = st2.matk; n.def = st2.def; if (st2.spd) n.spd = st2.spd; if (st2.maxStamina && (n.maxStamina == null)) { n.maxStamina = st2.maxStamina; n.stamina = st2.stamina; } }
                 }
               } catch (eH) {}
               if (!Number.isFinite(+n.maxHp) || (+n.maxHp) < 1) { n.maxHp = 40; n.maxMp = 20; }
@@ -2692,9 +2692,10 @@ window.Game = (() => {
         });
         // war-party levels: fit to break the holding (capped like its foes)
         try {
-          const st = window.Entities.makeNpcStatBlock(lv, role, Math.hypot(spot.x, spot.y));
+          const st = window.Entities.makeNpcStatBlock(lv, role, Math.hypot(spot.x, spot.y), { abilities: npc.abilities, weapon: (npc.equipment && npc.equipment.weapon) || null, armor: (npc.equipment && npc.equipment.armor) || null });
           npc.lv = lv; npc.maxHp = st.maxHp; npc.hp = st.maxHp; npc.maxMp = st.maxMp; npc.mp = st.maxMp;
           npc.atk = st.atk; npc.matk = st.matk; npc.def = st.def; npc.spd = st.spd;
+          if (st.maxStamina) { npc.maxStamina = st.maxStamina; npc.stamina = st.stamina; }
         } catch (e) { }
         npc.homeGx = spot.x; npc.homeGy = spot.y;
         npc.armyBase = { gx: b.cx, gy: b.cy, radius: b.radius, baseId, name: bn, boss: kinds.boss || null };
@@ -3526,7 +3527,7 @@ window.Game = (() => {
                 try { if (walkable(tx2, ty2)) { px2 = tx2; py2 = ty2; break; } } catch (eW) {}
               }
             } catch (eP) {}
-            m2.isBoss = true; m2._thresholdExtra = true;
+            m2.isBoss = true; m2.isPortalMimic = true; m2._thresholdExtra = true;
             m2.dungeonId = d.id;
             try { if (window.MP && window.MP.M && window.MP.M.active && window.MP.M.hash) m2.ownerHash = String(window.MP.M.hash).toLowerCase(); } catch (eO) {}
             m2.x = px2; m2.y = py2; m2.homeX = px2; m2.homeY = py2;
@@ -3609,9 +3610,9 @@ window.Game = (() => {
         if (e.remoteHash) return String(e.remoteHash).toLowerCase();
         if (e.isRemotePlayer && typeof e.id === "string" && e.id.startsWith("remote_")) return e.id.slice(7).toLowerCase();
         if (e.isRemoteProxy && e.hash) return String(e.hash).toLowerCase();
-        // remote party followers carry their owner's hash (see getRemotes);
+        // remote party followers + beasts carry their owner's hash (see getRemotes);
         // older sends without it still resolve via isRemoteParty + ownerName.
-        if (e.isRemoteParty && e.remoteHash) return String(e.remoteHash).toLowerCase();
+        if ((e.isRemoteParty || e.isRemoteTame) && e.remoteHash) return String(e.remoteHash).toLowerCase();
         if (myH && (e.inParty || e.isTame || e.isShadowClone)) return myH;
         try { if (myH && G.player && Array.isArray(G.player.tames) && G.player.tames.includes(e)) return myH; } catch (ee) {}
       } catch (err) {}
@@ -5847,7 +5848,7 @@ window.Game = (() => {
         // weapon techniques + war-spell buffs sharpen the swing (the player's
         // learnt kit; allies share warcry). Deeds, not perks — gate on known.
         try {
-          const abk = abId === "strike" || abId === "bowshot" || abId === "whirlwind" || (window.CFG.ABILITIES[abId] && window.CFG.ABILITIES[abId].kind === "technique");
+          const abk = abId === "strike" || abId === "bowshot" || abId === "whirlwind" || (window.CFG.ABILITIES[abId] && (window.CFG.ABILITIES[abId].kind === "technique" || window.CFG.ABILITIES[abId].kind === "shallow"));
           if (abk && caster && target) {
             dmg = Math.max(1, Math.round(dmg * techniqueStrikeMult(caster, abId, target)));
           }
@@ -5892,10 +5893,14 @@ window.Game = (() => {
     // (default weapon slot / equipment.weapon) — a dagger art needs a dagger, etc.
     function hasDefaultWeapon(caster, techId) {
       try {
-        if (!caster || caster.kind !== "player" || !window.Entities.techWeaponFam) return true;
-        const req = window.Entities.techWeaponFam(techId);
-        if (!req) return true;
-        return window.Entities.wieldedFamily(caster) === req;
+        if (!caster || caster.kind !== "player") return true;
+        let fams = [];
+        try {
+          if (window.Entities.techWeaponFams) fams = window.Entities.techWeaponFams(techId) || [];
+          else if (window.Entities.techWeaponFam) { const r0 = window.Entities.techWeaponFam(techId); if (r0) fams = [r0]; }
+        } catch (e2) { }
+        if (!fams.length) return true;
+        return fams.indexOf(window.Entities.wieldedFamily(caster)) >= 0;
       } catch (e) { return true; }
     }
     function techniqueStrikeMult(caster, abId, target) {
@@ -5972,7 +5977,7 @@ window.Game = (() => {
       // (spell-shaped trees, Strength-hearted damage)
       try {
         const abx = window.CFG.ABILITIES[abId];
-        if (abx && abx.kind === "technique" && caster && caster.kind === "player" && window.Entities.getPerks) {
+        if (abx && (abx.kind === "technique" || abx.kind === "shallow") && caster && caster.kind === "player" && window.Entities.getPerks) {
           const qx = window.Entities.getPerks(caster, abId);
           m *= 1 + 0.15 * (qx.potency | 0) + 0.08 * (qx.surge | 0);
         }
@@ -5982,6 +5987,9 @@ window.Game = (() => {
     // instant arts roll their damage through combatDmg("strike", ...), which
     // can never see the art's own tree — so the active-tree sharpening above
     // is threaded explicitly at each technique damage site instead.
+    // (getPerks already folds in cross-tree inheritance: deep arts gain
+    // their spell + shallow-art trees; multi-weapon shallows gain every
+    // listed weapon tree via techWeaponScale.)
     function techArtMult(caster, abId) {
       try {
         if (caster && caster.kind === "player" && window.Entities.getPerks) {
@@ -6053,6 +6061,11 @@ window.Game = (() => {
           let ok = true;
           if (req.el) for (const k of Object.keys(req.el)) if ((p.techXp.el[k] || 0) < req.el[k]) { ok = false; break; }
           if (ok && req.fam) for (const k of Object.keys(req.fam)) if ((p.techXp.fam[k] || 0) < req.fam[k]) { ok = false; break; }
+          if (ok && req.anyFam) {
+            let anyOk = false;
+            for (const k of Object.keys(req.anyFam)) if ((p.techXp.fam[k] || 0) >= req.anyFam[k]) { anyOk = true; break; }
+            if (!anyOk) ok = false;
+          }
           if (ok && req.kills && p.techXp.kills < req.kills) ok = false;
           if (ok && req.undeadKills && p.techXp.undeadKills < req.undeadKills) ok = false;
           // deed casts (e.g. Disciples of Shadow counting successful Ejects)
@@ -6093,7 +6106,7 @@ window.Game = (() => {
         const px2 = p.x ?? p.gx, py2 = p.y ?? p.gy;
         addParticles(px2, py2, "#ffd93d", 24);
         addDmgNum(px2, py2, `${T.name}!`, "#ffd93d");
-        window.UI.toast(`Deep Art learnt: ${T.name}! ${T.hint || ""}${bindFull ? " (Hotbar full — bind it in Inventory.)" : ""}`, 7000);
+        window.UI.toast(`Weapon Art learnt: ${T.name} (${T.shallow ? "shallow" : "deep"})! ${T.hint || ""}${bindFull ? " (Hotbar full — bind it in Inventory.)" : ""}`, 7000);
         if (window.UI.showTechBanner) window.UI.showTechBanner(T);
         window.UI.updateHUD(); window.UI.updateHotbar();
         try { saveGame(true); } catch (e2) { }
@@ -6555,8 +6568,26 @@ window.Game = (() => {
       if (!m || typeof m.id !== "string") return;
       const did = (typeof m.did === "string" && m.did) ? m.did.slice(0, 48) : null;
       if (did) {
-        // delve intent: only the instance sim resolves (host-preferred).
-        try { if (!window.MP.amDungeonSim || !window.MP.amDungeonSim(did)) return; } catch (e) { return; }
+        // delve intent: only the instance sim resolves (host-preferred) —
+        // except owner-held teeth: the triggerer keeps simulating its own
+        // chest/portal mimic, so the OWNER resolves blows against it (the
+        // sim never sees that mob and drops the intent; everyone else drops
+        // it too — replicas and strangers never resolve).
+        try {
+          const _noSim = !window.MP.amDungeonSim || !window.MP.amDungeonSim(did);
+          if (_noSim) {
+            let mine = false;
+            try {
+              const _meO = String((window.MP && window.MP.M && window.MP.M.hash) || "").toLowerCase();
+              const _own = (G.mobs || []).find(x => x && x.id === m.id.slice(0, 48));
+              if (_own && !_own.remoteOwned && !(_own.hp <= 0) && (_own.mimicTricked || _own.mimicExposed || _own.isPortalMimic)) {
+                const _ohO = _own.ownerHash ? String(_own.ownerHash).toLowerCase() : null;
+                if (!_ohO || _ohO === _meO) mine = true;
+              }
+            } catch (eO) {}
+            if (!mine) return;
+          }
+        } catch (e) { return; }
         try {
           if (!G.player || !G.player.inDungeon || !G.dungeon) return;
           let myDid = null;
@@ -6582,12 +6613,16 @@ window.Game = (() => {
       try { ent = (G.npcs || []).find(x => x && x.id === id) || (G.mobs || []).find(x => x && x.id === id); } catch (e) {}
       if (!ent || !(ent.hp > 0)) return;
       if (ent.isRemoteProxy || ent.isRemotePlayer || ent.inParty || ent.isTame || ent.isShadowClone || ent.remoteOwned) return;
-      const amt = Math.max(1, Math.min(9999, Math.round(+m.amount || 0)));
+      const amt = Math.max(1, Math.min(999999, Math.round(+m.amount || 0)));
       if (!(amt > 0)) return;
       // range sanity: the attacker's live bubble must stand near the victim.
       // Overworld bubbles are host-side proxies; delve bubbles are the
-      // attacker's remote hero view in the same instance.
+      // attacker's remote hero view in the same instance. Party members and
+      // tames fight away from their owner's side, so their pin positions
+      // (same pos channel, same trust as the bubble) count too — otherwise a
+      // pet's blows at a far-off victim die here with zero feedback.
       let px = null, py = null;
+      const atkPts = [];
       try {
         const fh = String(fromHash || "").toLowerCase();
         if (did) {
@@ -6598,7 +6633,10 @@ window.Game = (() => {
                 if (!isFinite(+r.x) || !isFinite(+r.y)) continue;
                 if (!r.dun) continue;
                 try { if (r.dId && String(r.dId) !== String(did)) continue; } catch (e) {}
-                px = +r.x; py = +r.y; break;
+                px = +r.x; py = +r.y;
+                try { if (Array.isArray(r.party)) for (const q of r.party) atkPts.push(q); } catch (e) {}
+                try { if (Array.isArray(r.tames)) for (const q of r.tames) atkPts.push(q); } catch (e) {}
+                break;
               }
             }
           } catch (e) {}
@@ -6607,15 +6645,26 @@ window.Game = (() => {
               const rep = (typeof findById === "function") ? findById("remote_" + fh) : null;
               if (rep && isFinite(+(rep.x ?? rep.gx)) && isFinite(+(rep.y ?? rep.gy))) {
                 try { if (!rep.dId || String(rep.dId) === String(did)) { px = +(rep.x ?? rep.gx); py = +(rep.y ?? rep.gy); } } catch (e) {}
+                try { if (Array.isArray(rep.party)) for (const q of rep.party) atkPts.push(q); } catch (e) {}
+                try { if (Array.isArray(rep.tames)) for (const q of rep.tames) atkPts.push(q); } catch (e) {}
               }
             } catch (e) {}
           }
         } else {
           const pc = (typeof proxyCache !== "undefined") ? proxyCache.get(fh) : null;
-          if (pc && isFinite(+pc.x) && isFinite(+pc.y)) { px = +pc.x; py = +pc.y; }
+          if (pc && isFinite(+pc.x) && isFinite(+pc.y)) {
+            px = +pc.x; py = +pc.y;
+            try { if (Array.isArray(pc.party)) for (const q of pc.party) atkPts.push(q); } catch (e) {}
+            try { if (Array.isArray(pc.tames)) for (const q of pc.tames) atkPts.push(q); } catch (e) {}
+          }
           else if (window.MP && window.MP.getRemotes) {
             for (const r of (window.MP.getRemotes() || [])) {
-              if (r && String(r.remoteHash || "").toLowerCase() === fh && isFinite(+r.x) && isFinite(+r.y) && !r.dun) { px = +r.x; py = +r.y; break; }
+              if (r && String(r.remoteHash || "").toLowerCase() === fh && isFinite(+r.x) && isFinite(+r.y) && !r.dun) {
+                px = +r.x; py = +r.y;
+                try { if (Array.isArray(r.party)) for (const q of r.party) atkPts.push(q); } catch (e) {}
+                try { if (Array.isArray(r.tames)) for (const q of r.tames) atkPts.push(q); } catch (e) {}
+                break;
+              }
             }
           }
         }
@@ -6623,7 +6672,18 @@ window.Game = (() => {
       } catch (e) {}
       const ex = ent.x ?? ent.gx, ey = ent.y ?? ent.gy;
       if (px == null || ex == null) return;
-      if (Math.hypot(px - ex, py - ey) > 16) return;
+      if (Math.hypot(px - ex, py - ey) > 16) {
+        // the owner's bubble is far — but the blow may ride a pet's fangs:
+        // accept when any of the sender's observed followers stands near.
+        let petNear = false;
+        try {
+          for (const q of atkPts) {
+            if (!q || !isFinite(+q.x) || !isFinite(+q.y)) continue;
+            if (Math.hypot(+q.x - ex, +q.y - ey) <= 16) { petNear = true; break; }
+          }
+        } catch (e) {}
+        if (!petNear) return;
+      }
       let src = null;
       try {
         if (did) {
@@ -6671,6 +6731,13 @@ window.Game = (() => {
             aid: (typeof m.aid === "string" ? m.aid.slice(0, 48) : null),
             el: String(m.el || "physical").slice(0, 16), fam: String(m.fam || "unarmed").slice(0, 16),
             move: (typeof m.move === "string" ? m.move.slice(0, 32) : null),
+            // quest-credit context: the killer's machine grants contract
+            // progress off this (substitute tags + the true death position —
+            // the stub below stands in for the corpse, so it must carry both)
+            qk: (typeof ent.questKind === "string" && ent.questKind) ? ent.questKind.slice(0, 24) : null,
+            qg: (typeof ent.questGuild === "string" && ent.questGuild) ? ent.questGuild.slice(0, 48) : null,
+            dx: (isFinite(+((ent.x != null ? ent.x : ent.gx))) ? +((ent.x != null ? ent.x : ent.gx)) : null),
+            dy: (isFinite(+((ent.y != null ? ent.y : ent.gy))) ? +((ent.y != null ? ent.y : ent.gy)) : null),
           });
         }
       } catch (e) {}
@@ -6703,7 +6770,11 @@ window.Game = (() => {
         lv, name: (typeof m.name === "string" && m.name) ? m.name.slice(0, 32) : "foe",
         isBoss: !!m.boss, baseId: (typeof m.baseId === "string" ? m.baseId : null),
         dungeonId: (typeof m.did === "string" && m.did) ? m.did.slice(0, 48) : null, xpReward: mobLike ? xp : undefined,
-        x: p.x, y: p.y,
+        // death position + quest tags, so contract credit matches a local
+        // kill: substitutes credit via questKind, grounds via the death spot
+        x: (isFinite(+m.dx) ? +m.dx : p.x), y: (isFinite(+m.dy) ? +m.dy : p.y),
+        questKind: (typeof m.qk === "string" && m.qk) ? m.qk.slice(0, 24) : null,
+        questGuild: (typeof m.qg === "string" && m.qg) ? m.qg.slice(0, 48) : null,
       };
       if (mobLike) {
         if (xp > 0) {
@@ -6976,13 +7047,14 @@ window.Game = (() => {
       } catch (e) { }
       // incoming-hit log (same as local blows) so routed deaths audit too
       try {
-        p.recentHits = p.recentHits || [];
-        p.recentHits.push({
-          t: Date.now(), dmg, src: (info.fromName || "Something"),
-          kind: info.srcKind || null, lv: info.fromLv | 0 || 0,
-          el: info.el || null, magic: !!info.magic,
-        });
-        if (p.recentHits.length > 30) p.recentHits.splice(0, p.recentHits.length - 30);
+       p.recentHits = p.recentHits || [];
+       p.recentHits.push({
+         t: Date.now(), dmg, src: (info.fromName || "Something"),
+         kind: info.srcKind || null, lv: info.fromLv | 0 || 0,
+         el: info.el || null, magic: !!info.magic,
+          mv: info.move || null,
+       });
+       if (p.recentHits.length > 30) p.recentHits.splice(0, p.recentHits.length - 30);
       } catch (e) { }
       try { addDmgNum(p.x, p.y, info.crit ? "CRIT " + dmg : dmg, info.crit ? "#ffe27f" : "#ff6b6b"); } catch (e) { }
       try { addParticles(p.x, p.y, "#ff6b6b", 6); } catch (e) { }
@@ -7041,6 +7113,131 @@ window.Game = (() => {
   // status, no wall-chipping, no mimic/procs (visual projectiles carry
   // visual:true and the damage paths skip them). Culled past 34 tiles; inside
   // a shared delve only the same instance replays.
+  // Remote weapon-art replay: the cast flash (kind:"cast" + abId) names the
+  // art — this redraws its signature swing locally so other players SEE the
+  // art, not just a flash. Strictly cosmetic: no damage, no status, no procs.
+  function replayRemoteArt(abId, px, py, face, col) {
+    try {
+      const ARTC = { holy_sword: "#ffe27f", cinder_edge: "#ff5e7a", skullsplitter: "#ffd93d", avalanche: "#bfe9ff", viper_flurry: "#7ddf6b", iron_palm: "#fff3b0", feint_attack: "#dfe9ff", stalwart_reflector: "#7fc4ff", flowing_strikes: "#4fc3ef", faux_chop: "#ff5e7a", one_armed_guard: "#bfe9ff", locust_swarm: "#7ddf6b", thundering_crack: "#fff7ae", whirlwind_slinger: "#d9cfae", hammerfell_impact: "#d9cfae", glancing_arc: "#ffe27f", splinter_hewn: "#ffd93d", wasp_sting: "#7ddf6b", knockback_tap: "#d9cfae", short_lunge: "#bfe9ff", twin_nock: "#ffe27f", wrist_snap: "#d9cfae", brace_bash: "#8ad0ff", palm_star: "#ffffff", thorn_reign: "#7ddf6b", comet_shot: "#ff7b2e", spiral_pike: "#bfe9ff", dragon_coil: "#7ddf6b", exploding_shuriken: "#ff7b2e", slime_shuriken: "#7ddf6b", shadow_disciples: "#c9a7ff", tempest_lance: "#fff7ae" };
+      const c = ARTC[abId] || col;
+      if (abId === "holy_sword") {
+        const bx = px + Math.cos(face) * 1.8, by = py + Math.sin(face) * 1.8;
+        G.particles.push({ x: bx, y: by - 4, x2: bx, y2: by + 0.5, t: 0, life: 0.7, color: "#ffe27f", kind: "beam", lw: 12 });
+        G.particles.push({ x: px, y: py, t: 0, life: 0.5, color: "#ffe27f", kind: "ring" });
+        G.particles.push({ x: px, y: py, t: 0, life: 0.45, color: "#fffbe8", kind: "arc", ang: face, lw: 8, r: 2.6 });
+        addParticles(bx, by, "#fffbe8", 12);
+        try { holyMotes(px, py, "#fffbe8", 8); } catch (e2) { }
+        return;
+      }
+      let fams = [];
+      try { if (window.Entities && window.Entities.techWeaponFams) fams = window.Entities.techWeaponFams(abId) || []; } catch (e2) { }
+      const fam = (fams && fams[0]) || null;
+      if (fam === "shield" || abId === "one_armed_guard") {
+        G.particles.push({ x: px, y: py, t: 0, life: 0.4, color: c, kind: "ring" });
+        G.particles.push({ x: px, y: py, t: 0, life: 3, color: c, kind: "bubble", r: 1.3 });
+        addParticles(px, py, c, 10);
+        return;
+      }
+      if (fam === "bow" || fam === "thrown" || !fam) {
+        // arrows and stars fly as their own proj messages; the flash covers it
+        addParticles(px, py, c, 6);
+        return;
+      }
+      if (fam === "dagger" || fam === "spear" || fam === "unarmed") {
+        const n = (abId === "viper_flurry" || abId === "flowing_strikes") ? 4 : (abId === "feint_attack" ? 3 : 1);
+        for (let i = 0; i < n; i++) G.particles.push({ x: px, y: py, t: 0, life: 0.16, color: c, kind: "thrust", ang: face + (Math.random() - 0.5) * (n > 1 ? 1 : 0.2), dist: 1.4 });
+        G.particles.push({ x: px, y: py, t: 0, life: 0.3, color: c, kind: "ring" });
+        addParticles(px, py, c, 8);
+        return;
+      }
+      // sword / axe / hammer / whip: a heavy arc in the art's color
+      G.particles.push({ x: px + Math.cos(face) * 1, y: py + Math.sin(face) * 1, t: 0, life: 0.22, color: c, kind: "arc", ang: face, lw: 7, r: 1.8 });
+      G.particles.push({ x: px, y: py, t: 0, life: 0.3, color: c, kind: "ring" });
+      addParticles(px, py, c, 10);
+      if (fam === "hammer" || fam === "axe") addParticles(px, py, "#d9cfae", 8);
+    } catch (e) { }
+  }
+  // cataclysm release bursts on other screens (visual-only: zones ride
+  // hazard messages, hunters ride orb ones — this is the detonation flash).
+  function replayRemoteCata(abId, px, py, face, r, col) {
+    try {
+      r = (isFinite(+r) && +r > 0) ? +r : 2;
+      const RC = (n, fn) => { try { for (let i = 0; i < n; i++) fn(i); } catch (e) { } };
+      if (abId === "energy_beam") {
+        const ex = px + Math.cos(face) * r, ey = py + Math.sin(face) * r;
+        G.particles.push({ x: px + Math.cos(face), y: py + Math.sin(face), x2: ex, y2: ey, t: 0, life: 0.55, color: "#8a4ae0", kind: "beam", lw: 8 });
+        G.particles.push({ x: px + Math.cos(face), y: py + Math.sin(face), x2: ex, y2: ey, t: 0, life: 0.55, color: col, kind: "beam", lw: 20 });
+        G.particles.push({ x: px + Math.cos(face), y: py + Math.sin(face), x2: ex, y2: ey, t: 0, life: 0.4, color: "#ffffff", kind: "beam", lw: 7 });
+        RC(4, (i) => G.particles.push({ x: px + Math.cos(face) * r * (i + 1) / 4, y: py + Math.sin(face) * r * (i + 1) / 4, t: 0, life: 0.35, color: col, kind: "ring" }));
+        addParticles(ex, ey, "#ffffff", 12);
+      } else if (abId === "meteorfall") {
+        RC(6, () => {
+          const mx = px + (Math.random() - 0.5) * 2 * Math.min(6.5, r), my = py + (Math.random() - 0.5) * 2 * Math.min(6.5, r);
+          G.particles.push({ x: mx, y: my - 5, x2: mx, y2: my + 0.5, t: 0, life: 0.4, color: col, kind: "beam", lw: 10 });
+          G.particles.push({ x: mx, y: my, t: 0, life: 0.35, color: col, kind: "ring" });
+          addParticles(mx, my, "#ffc93d", 6);
+        });
+        addParticles(px, py, col, 8);
+      } else if (abId === "raging_volcano") {
+        RC(12, () => G.particles.push({ x: px + (Math.random() - 0.5) * 0.9, y: py - 0.2, vx: (Math.random() - 0.5) * 4.2, vy: -3.5 - Math.random() * 6.5, grav: 8, t: 0, life: 0.8 + Math.random() * 0.6, color: Math.random() < 0.5 ? "#ffc93d" : col, glow: "#ff5e2e", kind: "glob", r0: 0.12 + Math.random() * 0.13 }));
+        RC(4, () => G.particles.push({ x: px + (Math.random() - 0.5) * 1.2, y: py - 1 - Math.random(), vx: (Math.random() - 0.5), vy: -1 - Math.random() * 0.8, t: 0, life: 1.1, color: "#4a4038", kind: "puff", r0: 0.25, grow: 1.2, alpha: 0.6 }));
+        G.particles.push({ x: px, y: py, t: 0, life: 0.55, color: col, kind: "ring" });
+        addParticles(px, py, "#ffc93d", 12);
+      } else if (abId === "primordial_sea") {
+        G.particles.push({ x: px, y: py, t: 0, life: 1.0, color: col, kind: "bubble", r: 2.2 });
+        RC(3, (i) => G.particles.push({ x: px, y: py, t: 0, life: 0.55 + i * 0.1, color: i ? col : "#ffffff", kind: "ring" }));
+        RC(6, (i) => G.particles.push({ x: px, y: py, t: 0, life: 0.7, color: i % 2 ? "#d8f4ff" : col, kind: "arc", ang: face + i * 1.05, lw: 9, r: 3.4 }));
+        addParticles(px, py, col, 12);
+      } else if (abId === "storm_of_blades") {
+        G.particles.push({ x: px, y: py, t: 0, life: 0.9, color: col, kind: "bubble", r: 1.8 });
+        RC(3, (i) => G.particles.push({ x: px, y: py, t: 0, life: 0.35 + i * 0.2, color: i ? col : "#ffffff", kind: "ring" }));
+        RC(6, (i) => G.particles.push({ x: px, y: py, t: 0, life: 0.6, color: i % 2 ? "#ffffff" : col, kind: "arc", ang: face + i * 1.05, lw: 9, r: 3.2 }));
+        addParticles(px, py, col, 12);
+      } else if (abId === "hurricane") {
+        G.particles.push({ x: px, y: py, t: 0, life: 1.0, color: col, kind: "bubble", r: 1.6 });
+        RC(3, (i) => G.particles.push({ x: px, y: py, t: 0, life: 0.35 + i * 0.2, color: i ? col : "#ffffff", kind: "ring" }));
+        RC(6, (i) => G.particles.push({ x: px, y: py, t: 0, life: 0.6, color: i % 2 ? "#ffffff" : col, kind: "arc", ang: face + i * 1.05, lw: 8, r: r * 0.85 }));
+        addParticles(px, py, col, 16);
+      } else if (abId === "whiteout") {
+        RC(3, (i) => G.particles.push({ x: px, y: py, t: 0, life: 0.4 + i * 0.1, color: i ? "#ffffff" : col, kind: "ring" }));
+        RC(4, (i) => G.particles.push({ x: px, y: py, t: 0, life: 0.5, color: "#e8f7ff", kind: "arc", ang: face + i * 1.57, lw: 8, r: r }));
+        addParticles(px, py, "#e8f7ff", 16);
+      } else if (abId === "crystal_prison") {
+        G.particles.push({ x: px, y: py, t: 0, life: 1.0, color: col, kind: "bubble", r: r });
+        RC(3, (i) => G.particles.push({ x: px, y: py, t: 0, life: 0.35 + i * 0.2, color: i ? "#e8f4ff" : "#ffffff", kind: "ring" }));
+        RC(4, () => {
+          const hx = px + (Math.random() - 0.5) * r, hy = py + (Math.random() - 0.5) * r * 0.7;
+          G.particles.push({ x: hx, y: hy - 2, x2: hx, y2: hy + 0.3, t: 0, life: 0.3, color: "#e8f4ff", kind: "beam", lw: 5 });
+        });
+        addParticles(px, py, col, 12);
+      } else if (abId === "burning_light") {
+        G.particles.push({ x: px, y: py, t: 0, life: 1.0, color: col, kind: "bubble", r: r });
+        RC(3, (i) => G.particles.push({ x: px, y: py, t: 0, life: 0.35 + i * 0.2, color: i ? col : "#ffffff", kind: "ring" }));
+        RC(8, (i) => G.particles.push({ x: px, y: py, t: 0, life: 0.5, color: i % 2 ? "#ffffff" : "#ffd93d", kind: "arc", ang: face + i * 0.785, lw: 9, r: r * 0.9 }));
+        addParticles(px, py, col, 12);
+      } else if (abId === "barbed_plague") {
+        G.particles.push({ x: px, y: py, t: 0, life: 0.9, color: col, kind: "bubble", r: 1.6 });
+        RC(3, (i) => G.particles.push({ x: px, y: py, t: 0, life: 0.35 + i * 0.2, color: i ? col : "#eaffea", kind: "ring" }));
+        RC(8, (i) => G.particles.push({ x: px, y: py, t: 0, life: 0.45, color: i % 2 ? "#eaffea" : col, kind: "thrust", ang: face + i * 0.785, dist: 2.4 }));
+        addParticles(px, py, col, 12);
+      } else if (abId === "void_hole") {
+        G.particles.push({ x: px, y: py, t: 0, life: 0.9, color: "#5a2b9a", kind: "bubble", r: 2.4 });
+        RC(3, (i) => G.particles.push({ x: px, y: py, t: 0, life: 0.35 + i * 0.2, color: i ? col : "#ffffff", kind: "ring" }));
+        addParticles(px, py, col, 10);
+      } else if (abId === "blood_hole") {
+        G.particles.push({ x: px, y: py, t: 0, life: 1.0, color: col, kind: "bubble", r: 2.0 });
+        G.particles.push({ x: px, y: py, t: 0, life: 0.35, color: "#ffffff", kind: "ring" });
+        G.particles.push({ x: px, y: py, t: 0, life: 0.55, delay: 0.1, color: col, kind: "ring" });
+        G.particles.push({ x: px, y: py, t: 0, life: 0.65, delay: 2.05, color: "#c93b6b", kind: "ring" });
+        RC(8, (i) => G.particles.push({ x: px, y: py, t: 0, life: 0.6, color: i % 2 ? "#ffd9e8" : col, kind: "arc", ang: face + i * 0.785, lw: 8, r: 3.2 }));
+        addParticles(px, py, col, 12);
+      } else {
+        // tidal wave launch + any future zone: gathering rings + foam burst
+        RC(3, (i) => G.particles.push({ x: px, y: py, t: 0, life: 0.4 + i * 0.1, color: i ? col : "#ffffff", kind: "ring" }));
+        addParticles(px, py, col, 16);
+      }
+    } catch (e) { }
+  }
   function playRemoteAct(m, from) {
     try {
       if (!m || !G.player) return;
@@ -7090,16 +7287,65 @@ window.Game = (() => {
             status: null, visual: true, netAnn: true,
           });
         } catch (e) {}
+        // arrows and stars: the looser's draw/throw pose plays on their spot
+        try { if (!m.magic && window.Anim && window.Anim.ping) window.Anim.ping(px, py, "shoot", 240); } catch (eA) {}
         try { if (hear && window.Sfx) window.Sfx.fire(); } catch (e) {}
       } else if (kind === "cast") {
         try {
           const col = String(m.color || "#ffffff").slice(0, 16);
+          const abId = String(m.abId || "");
+          let ak = null;
+          try { const ab = window.CFG && window.CFG.ABILITIES ? window.CFG.ABILITIES[abId] : null; ak = (ab && ab.kind) || null; } catch (e2) { }
+          const face = +m.face || 0;
           addParticles(px, py, col, 10);
           G.particles.push({ x: px, y: py, t: 0, life: 0.3, color: col, kind: "ring" });
-          // animation: whoever stands on this spot rears up (see src/anim.js)
-          try { if (window.Anim && window.Anim.ping) window.Anim.ping(px, py, "cast", 340); } catch (eA) { }
+          // ability-specific replay (mirrors the local visuals — cosmetic only)
+          let pingK = "cast", pingMs = 340, playSwing = false;
+          if (ak === "aoe") {
+            // whirlwind / tornado: the spin itself
+            try {
+              for (let i = 0; i < 3; i++) G.particles.push({ x: px, y: py, t: 0, life: 0.42, color: i ? "#d9cfae" : "#c9a7ff", kind: "arc", ang: face + i * 2.1, lw: 7, r: 1.7 });
+              addParticles(px, py, "#d9cfae", 10);
+            } catch (e3) { }
+            pingK = "melee"; pingMs = 280; playSwing = true;
+          } else if (ak === "technique" || ak === "shallow") {
+            try { replayRemoteArt(abId, px, py, face, col); } catch (e3) { }
+            pingK = "melee"; pingMs = 280; playSwing = true;
+          } else if (ak === "buff") {
+            if (abId === "shieldwall") {
+              try {
+                for (let i = 0; i < 3; i++) G.particles.push({ x: px, y: py, t: 0, life: 0.5, color: col, kind: "arc", ang: face + i * 2.1, lw: 4, r: 1.1 });
+                G.particles.push({ x: px, y: py, t: 0, life: 1.2, color: col, kind: "bubble", r: 1.3 });
+              } catch (e3) { }
+            } else {
+              try { holyMotes(px, py, col, 8); } catch (e3) { }
+              try { G.particles.push({ x: px, y: py, t: 0, life: 0.35, color: col, kind: "ring" }); } catch (e3) { }
+            }
+          } else if (ak === "heal" || ak === "support") {
+            try { holyMotes(px, py, "#5dd68a", 10); } catch (e3) { }
+            try { G.particles.push({ x: px, y: py, t: 0, life: 0.35, color: "#5dd68a", kind: "ring" }); } catch (e3) { }
+          } else if (ak === "cataclysm") {
+            // the gathering: motes lean in (the blast itself stays local)
+            try {
+              G.particles.push({ x: px, y: py, t: 0, life: 0.5, color: col, kind: "ring" });
+              G.particles.push({ x: px, y: py, t: 0, life: 2.0, color: col, kind: "bubble", r: 1.6 });
+              for (let i = 0; i < 14; i++) {
+                const a = Math.random() * Math.PI * 2, rr = 2.5 + Math.random() * 2;
+                const qx = px + Math.cos(a) * rr, qy = py + Math.sin(a) * rr;
+                G.particles.push({ x: qx, y: qy, vx: (px - qx) * 1.6, vy: (py - qy) * 1.6, t: 0, life: 0.6 + Math.random() * 0.3, color: col });
+              }
+              addParticles(px, py, col, 12);
+            } catch (e3) { }
+          } else if (ak === "revive") {
+            try {
+              G.particles.push({ x: px, y: py, t: 0, life: 0.8, color: "#fff7ae", kind: "beam", lw: 14, x2: px, y2: py + 0.5 });
+              holyMotes(px, py, "#fffbe8", 8);
+            } catch (e3) { }
+          }
+          // animation: whoever stands on this spot rears up (arts lunge instead)
+          try { if (window.Anim && window.Anim.ping) window.Anim.ping(px, py, pingK, pingMs); } catch (eA) { }
+          try { if (hear && window.Sfx) { if (m.snd === "heal") window.Sfx.heal(); else if (playSwing) window.Sfx.swing(); else window.Sfx.fire(); } } catch (eS) { }
         } catch (e) {}
-        try { if (hear && window.Sfx) { if (m.snd === "heal") window.Sfx.heal(); else window.Sfx.fire(); } } catch (e) {}
       } else if (kind === "angel") {
         try {
           G.angelBeacons = G.angelBeacons || [];
@@ -7116,6 +7362,68 @@ window.Game = (() => {
           addParticles(px, py, "#ff6b2e", 18);
         } catch (e) {}
         try { if (hear && window.Sfx) window.Sfx.fire(); } catch (e) {}
+      } else if (kind === "hazard") {
+        // another machine's lingering spellfield: same body + ambient ticks
+        // (src null + dmg 0 — foeOf never matches a null src, so it can only
+        // ever shimmer, never wound). Dawn domes ride their caster via follow.
+        try {
+          G.hazards = G.hazards || [];
+          const lifeMs = (isFinite(+m.life) ? Math.max(0.5, Math.min(9, +m.life)) : 4) * 1000;
+          const hh = {
+            x: px, y: py, r: (isFinite(+m.r) ? +m.r : 1.6),
+            until: performance.now() + lifeMs, tick: 0.5, acc: 0,
+            src: null, dmg: 0, abId: String(m.abId || ""), el: "spell", fam: "spell",
+            color: String(m.color || "#ffffff").slice(0, 16),
+            visual: true, netAnn: true,
+          };
+          if (isFinite(+m.pulseR)) hh.pulseR = +m.pulseR;
+          if (isFinite(+m.ang)) hh.ang = +m.ang;
+          if (isFinite(+m.seed)) hh.seed = +m.seed;
+          if (m.follow && from) hh.followHash = String(from).toLowerCase();
+          else if (m.follow && m.from) hh.followHash = String(m.from).toLowerCase();
+          G.hazards.push(hh);
+          G.particles.push({ x: px, y: py, t: 0, life: 0.35, color: hh.color, kind: "ring" });
+          addParticles(px, py, hh.color, 8);
+        } catch (e) {}
+      } else if (kind === "orb") {
+        // another machine's hunting body: same sprite + trail, no wounds.
+        try {
+          G.orbs = G.orbs || [];
+          const lifeMs = (isFinite(+m.life) ? Math.max(0.5, Math.min(9, +m.life)) : 4) * 1000;
+          const oo = {
+            x: px, y: py, vx: (+m.vx || 0), vy: (+m.vy || 0),
+            mode: (m.mode === "orbit" ? "orbit" : "homing"),
+            trail: Array.isArray(m.trail) ? m.trail.slice(0, 4) : null,
+            src: null, dmg: 0, abId: String(m.abId || ""), el: "spell",
+            color: String(m.color || "#ffffff").slice(0, 16),
+            until: performance.now() + lifeMs, acc: 0,
+            visual: true, netAnn: true,
+          };
+          if (oo.mode === "orbit") {
+            if (isFinite(+m.ang)) oo.ang = +m.ang;
+            oo.angSpd = (isFinite(+m.angSpd) ? +m.angSpd : 3.2);
+            if (isFinite(+m.radius)) oo.radius = +m.radius;
+            oo.ox = (isFinite(+m.ox) ? +m.ox : px); oo.oy = (isFinite(+m.oy) ? +m.oy : py);
+          }
+          G.orbs.push(oo);
+          addParticles(px, py, oo.color, 6);
+        } catch (e) {}
+      } else if (kind === "wave") {
+        // the rider itself moves via pos sync — this only lays the water.
+        try {
+          const wa = (isFinite(+m.ang) ? +m.ang : 0), wr = (isFinite(+m.r) ? +m.r : 1.8);
+          G.particles.push({ x: px, y: py, t: 0, life: 0.32, color: "#4fc3ef", kind: "wave", ang: wa, r: wr });
+          G.particles.push({ x: px, y: py, t: 0, life: 0.4, color: "#d8f4ff", kind: "ring" });
+          addParticles(px, py, "#d8f4ff", 3);
+        } catch (e) {}
+      } else if (kind === "cata") {
+        try {
+          const abId = String(m.abId || "");
+          const col = String(m.color || "#ffffff").slice(0, 16);
+          replayRemoteCata(abId, px, py, (+m.face || 0), (+m.r || 2), col);
+          try { if (window.Anim && window.Anim.ping) window.Anim.ping(px, py, "cast", 340); } catch (eA) { }
+        } catch (e) {}
+        try { if (hear && window.Sfx) { if (String(m.abId || "") === "burning_light") window.Sfx.heal(); else window.Sfx.fire(); } } catch (e) {}
       }
     } catch (e) {}
   }
@@ -7247,6 +7555,23 @@ function dealDamage(src, tgt, amount, opts = {}) {
             if (!_oh || _oh !== _me) return sendHitIntent(src, tgt, amount, opts);
           } catch (e) {}
         }
+        // Shared-delve replicas (someone else's triggered teeth): nobody
+        // rolls these locally — not even the sim. Intent so the OWNER
+        // resolves the one true outcome (it rides the owner's publish back
+        // to every screen). Solo delvers still roll locally. Status ticks
+        // never intent (the owner owns all ticks; intending them would
+        // double-apply) — they die on replicas like any orphan burn.
+        try {
+          if (_inD && tgt.remoteOwned && !tgt.corpse && !opts.isStatus && mpIntentVictim(tgt)) {
+            let _sharedD = false;
+            try {
+              const _occD = (window.MP && window.MP.dungeonOccupants && G.dungeon && G.dungeon.id) ? window.MP.dungeonOccupants(String(G.dungeon.id)) : [];
+              const _meD = String((window.MP && window.MP.M && window.MP.M.hash) || "").toLowerCase();
+              _sharedD = _occD.some(h => String(h).toLowerCase() !== _meD);
+            } catch (eD) {}
+            if (_sharedD) return sendHitIntent(src, tgt, amount, opts);
+          }
+        } catch (e) {}
         // replica status ticks (orphan burns on a shadow) die here: the sim
         // owns all ticks, and intending them would double-apply.
         try { if (_inD && tgt.remoteOwned) return 0; } catch (e) {}
@@ -7473,15 +7798,16 @@ function dealDamage(src, tgt, amount, opts = {}) {
     // be audited per hit (attacker, level, element, damage). Status ticks opt
     // out via isStatus — direct blows only, same as the death screen.
     try {
-      if (!opts.isStatus && tgt && (tgt === G.player || tgt.kind === "player") && dmg > 0) {
-        tgt.recentHits = tgt.recentHits || [];
-        tgt.recentHits.push({
-          t: Date.now(), dmg,
-          src: (src && (src.name || src.kind)) || "the wilds",
-          kind: (src && src.kind) || null, lv: (src && src.lv) || 0,
-          el: opts.el || null, magic: !!opts.magic,
-        });
-        if (tgt.recentHits.length > 30) tgt.recentHits.splice(0, tgt.recentHits.length - 30);
+     if (!opts.isStatus && tgt && (tgt === G.player || tgt.kind === "player") && dmg > 0) {
+       tgt.recentHits = tgt.recentHits || [];
+       tgt.recentHits.push({
+         t: Date.now(), dmg,
+         src: (src && (src.name || src.kind)) || "the wilds",
+         kind: (src && src.kind) || null, lv: (src && src.lv) || 0,
+         el: opts.el || null, magic: !!opts.magic,
+          mv: (function () { try { return mobMoveOf(src, opts); } catch (eMv) { return null; } })(),
+       });
+       if (tgt.recentHits.length > 30) tgt.recentHits.splice(0, tgt.recentHits.length - 30);
       }
     } catch (e) { }
     const txx = tgt.x ?? tgt.gx, tyy = tgt.y ?? tgt.gy;
@@ -8073,7 +8399,7 @@ function dealDamage(src, tgt, amount, opts = {}) {
     return null;
   }
   // ---------- stamina (Endurance) ----------
-  // maxStamina = 100 + (END−5)×5. Sprint drains, melee/chop cost a chunk,
+  // maxStamina = 100 + (END−5)×5. Sprint drains, flurry/chop cost a chunk, basic swings are free,
   // everything regens fast out of effort. Old saves refill on first tick.
   function ensureStamina(p) {
     try {
@@ -8119,6 +8445,16 @@ function dealDamage(src, tgt, amount, opts = {}) {
       const ab = (window.CFG && window.CFG.ABILITIES && window.CFG.ABILITIES[abId]) || null;
       if (!ab || !caster) return null;
       const E = window.Entities || {};
+      if (ab.kind === "shallow") {
+        let mp = ab.mp || 0, sc = ab.st || 0;
+        try { if (E.effectiveShallowMpCost) mp = E.effectiveShallowMpCost(caster, abId); } catch (e) { }
+        try { if (E.effectiveShallowStamCost) sc = E.effectiveShallowStamCost(caster, abId); } catch (e) { }
+        try { ensureStamina(caster); } catch (e) { }
+        if (typeof caster.stamina === "number" && typeof caster.maxStamina === "number") {
+          return ((caster.mp || 0) >= mp && (caster.stamina || 0) >= sc) ? "shallow" : null;
+        }
+        return ((caster.mp || 0) >= mp + sc) ? "shallow_mp" : null;
+      }
       if (ab.kind === "technique") {
         let sc = 1.5 * (ab.mp || 0);
         try { sc = E.effectiveStamCost ? E.effectiveStamCost(caster, abId) : sc; } catch (e) { }
@@ -8141,6 +8477,21 @@ function dealDamage(src, tgt, amount, opts = {}) {
     try {
       const ab = (window.CFG && window.CFG.ABILITIES && window.CFG.ABILITIES[abId]) || null;
       if (!ab) return 0;
+      if (how === "shallow") {
+        let mp = ab.mp || 0, sc = ab.st || 0;
+        try { if (window.Entities.effectiveShallowMpCost) mp = window.Entities.effectiveShallowMpCost(caster, abId); } catch (e) { }
+        try { if (window.Entities.effectiveShallowStamCost) sc = window.Entities.effectiveShallowStamCost(caster, abId); } catch (e) { }
+        caster.mp = (caster.mp || 0) - mp;
+        try { spendStamina(caster, sc); } catch (e) { caster.stamina = Math.max(0, (caster.stamina || 0) - sc); }
+        return mp;
+      }
+      if (how === "shallow_mp") {
+        let mp = ab.mp || 0, sc = ab.st || 0;
+        try { if (window.Entities.effectiveShallowMpCost) mp = window.Entities.effectiveShallowMpCost(caster, abId); } catch (e) { }
+        try { if (window.Entities.effectiveShallowStamCost) sc = window.Entities.effectiveShallowStamCost(caster, abId); } catch (e) { }
+        caster.mp = (caster.mp || 0) - (mp + sc);
+        return mp + sc;
+      }
       if (how === "stam") {
         let sc = 1.5 * (ab.mp || 0);
         try { sc = window.Entities.effectiveStamCost ? window.Entities.effectiveStamCost(caster, abId) : sc; } catch (e) { }
@@ -8172,7 +8523,7 @@ function dealDamage(src, tgt, amount, opts = {}) {
     addParticles(hit.gx + 0.5, hit.gy + 0.5, "#5da24a", 8);
     // biome bonus logs: the right tree in the right land drops rare stock.
     // Frostwood and yggdrasil NEVER chop on the surface world any more:
-    // frostwood surfaces only from delve floor 5+, yggdrasil only from
+    // frostwood surfaces only from delve floor 4+, yggdrasil only from
     // floor 11+ (chests/corpses) — nowhere else, even for bosses.
     try {
       const T = window.CFG.T;
@@ -8889,7 +9240,6 @@ function shootBow(ent, forceRide) {
         return { ok: false, msg: "no-arrows" };
       }
       if (!window.Items.removeItem(ent, slot.id, 1)) return { ok: false, msg: "no-arrows" };
-      try { spendStamina(ent, 5); } catch (e) { }
      const bowSpd = (bow && bow.bowSpeed) || 1;
      const dmg = bowShotDamage(ent, slot.item);
      const arrowObj = { id: slot.id, ...(slot.item.ammo ? { ammo: slot.item.ammo } : {}), ...(slot.item.status ? { status: slot.item.status } : {}) };
@@ -8924,7 +9274,13 @@ function shootBow(ent, forceRide) {
      } catch (eM) { try { arrowDefM = window.Items.ITEMS.arrow_iron; } catch (eM2) { } }
      try { ent._lastMove = "bowshot"; ent._lastMoveT = performance.now(); } catch (eLocM) { }
      const bowSpdM = (bow && bow.bowSpeed) || 1;
-     const dmgM = bowShotDamage(ent, arrowDefM);
+      // wild-mob arrows land at melee scale (ATK x1.1, like the old mobarrow
+      // volley): the shared hero bow formula multiplies bow ATK, arrow power
+      // squared and bow power together, which explodes at high tiers (a lv46
+      // archer's arrow hit ~1900 through 195 DEF where a melee strike lands 1)
+      // — one-shot or chip with nothing between. The fitted arrow tier still
+      // picks status effects (frost/venom); the bow still sets cadence.
+      const dmgM = Math.max(1, Math.round(combatAtk(ent) * 1.1 * (0.9 + Math.random() * 0.2)));
      const arrowObjM = { id: (arrowDefM && arrowDefM.id) || "arrow_iron", ...((arrowDefM && arrowDefM.ammo) ? { ammo: arrowDefM.ammo } : {}), ...((arrowDefM && arrowDefM.status) ? { status: arrowDefM.status } : {}) };
      fireArrowProjectile(ent, arrowObjM, dmgM);
      try { if (bow && bow.twin) fireArrowProjectile(ent, arrowObjM, Math.round(dmgM * 0.8), 0.06); } catch (eM3) { }
@@ -9091,8 +9447,9 @@ function meleeTreeHit(att, tgt) {
     // tidal-wave riders are busy surfing — they hold them too, unless this
     // is the ride's own held-attack flurry (forceRide).
     if (att.techFocus || (att.waveRide && !forceRide)) return;
-    // swinging is effort: player swings cost stamina (never blocked, just tiring)
-    try { if (att === G.player) spendStamina(att, 7); } catch (e) { }
+    // basic swings are free: normal weapon/unarmed attacks cost no stamina;
+    // flurry swings cost a reduced chunk (never blocked, just tiring)
+    try { if (att === G.player && isFlurry) spendStamina(att, 3); } catch (e) { }
     try { att._lastMove = "strike"; att._lastMoveT = performance.now(); } catch (eLoc) { }
     // animation trigger: melee lunge pose (see src/anim.js)
     try { att.atkUntil = performance.now() + 280; att.atkKind = "melee"; att.atkDur = 280; } catch (eAn) { }
@@ -9149,11 +9506,13 @@ function meleeTreeHit(att, tgt) {
     }
     let hitAny = false;
     let firstDmg = 0;
+    let firstReal = 0;
     const flurryOpt = isFlurry ? { flurry: true } : undefined;
     for (const f of targets) {
       const real = combatDmg(att, "strike", f, flurryOpt);
       const dealt = dealDamage(att, f, real, { el: mEl, fam: mFam, extraEls: mExtra, move: "strike" });
       if (!firstDmg) firstDmg = dealt;
+      if (!firstReal) firstReal = real;
       hitAny = true;
       try { if (!f.isRemoteProxy && !f.isRemotePlayer && typeof applyWeaponProcs === "function" && !(mpMustIntent() && mpIntentVictim(f) && (!att || mpIntentAttacker(att)))) applyWeaponProcs(att, f); } catch (e) { }
       try { if (att === G.player && typeof meleeTreeHit === "function") meleeTreeHit(att, f); } catch (e) { }
@@ -9173,7 +9532,9 @@ function meleeTreeHit(att, tgt) {
       if (hitAny && att === G.player && window.Entities.weaponTwin) {
         const tw = window.Entities.weaponTwin(att);
         if (tw && targets[0] && targets[0].hp > 0 && Math.random() < tw.chance) {
-          dealDamage(att, targets[0], Math.max(1, Math.round(firstDmg * tw.mult)), { color: "#bfe9ff", el: mEl, fam: mFam, extraEls: mExtra });
+          // echo base: routed (non-sim) blows return 0 locally, so the echo
+          // rides the computed strike instead of collapsing to 1 damage.
+          dealDamage(att, targets[0], Math.max(1, Math.round(((firstDmg > 0) ? firstDmg : firstReal) * tw.mult)), { color: "#bfe9ff", el: mEl, fam: mFam, extraEls: mExtra });
         }
       }
     } catch (e) { }
@@ -9185,7 +9546,7 @@ function meleeTreeHit(att, tgt) {
           att._snapN = (att._snapN | 0) + 1;
           if (att._snapN >= sb.every && targets[0] && targets[0].hp > 0) {
             att._snapN = 0;
-            dealDamage(att, targets[0], Math.max(1, Math.round(firstDmg * sb.mult)), { color: "#e8d9a0", el: mEl, fam: mFam, extraEls: mExtra });
+            dealDamage(att, targets[0], Math.max(1, Math.round(((firstDmg > 0) ? firstDmg : firstReal) * sb.mult)), { color: "#e8d9a0", el: mEl, fam: mFam, extraEls: mExtra });
             try { addDmgNum(targets[0].x ?? targets[0].gx, (targets[0].y ?? targets[0].gy) - 0.5, "snapback!", "#e8d9a0"); } catch (e2) { }
             try { window.Sfx.swing(); } catch (e2) { }
           }
@@ -9641,6 +10002,17 @@ function meleeTreeHit(att, tgt) {
       if (!p || p.hp <= 0) return;
       const ab = window.CFG.ABILITIES[abId];
       if (!ab) return;
+      // multiplayer: the release shows on other screens too (the channel-start
+      // flash was only the telegraph; projectiles announce themselves, but
+      // support + cataclysm releases need their own flash)
+      try {
+        if (ab.kind === "cataclysm" || ab.kind === "support") {
+          const fx0 = (typeof SPELL_FX !== "undefined" && SPELL_FX[abId]) || {};
+          const evt = { kind: "cast", abId, x: p.x ?? p.gx, y: p.y ?? p.gy, face: p.faceAng || 0, color: fx0.color || "#ffffff", snd: ab.kind === "support" ? "heal" : "fire" };
+          if (p === G.player && window.MP && window.MP.sendAct) window.MP.sendAct(evt);
+          else if (p && p !== G.player) mpSendAct(evt);
+        }
+      } catch (eR) { }
       if (ab.kind === "cataclysm") { releaseCataclysm(p, abId); return; }
       if (ab.kind === "projectile") {
         const mastery = (() => { try { return window.Entities.hasMastery(p, abId); } catch (e) { return false; } })();
@@ -9678,17 +10050,22 @@ function meleeTreeHit(att, tgt) {
     // no cast, no MP spent, no cooldown. Heroes, equipped allies/NPCs and
     // technique-wielding mobs must hold the steel — bosses alone are exempt
     // (a warlord IS the weapon: claws, fangs, living storm).
-    if (ab && ab.kind === "technique") {
+    if (ab && (ab.kind === "technique" || ab.kind === "shallow")) {
       try {
         // Bosses need no weapon: they cast bare-handed. Everyone else with a
         // technique — heroes, allies, tames, and the powerful wild mobs that
         // spawn wielding matching tiered steel — must hold its family.
+        // Shallow arts check the same way (Faux Chop accepts axe/sword/dagger).
         const bossCaster = !!(caster && caster.role === "mob" && !caster.isTame && !caster.inParty && window.Entities.isBossMobKind && window.Entities.isBossMobKind(caster.kind));
         if (!bossCaster) {
-        const req = window.Entities.techWeaponFam ? window.Entities.techWeaponFam(abId) : null;
-        if (req) {
+        let fams = [];
+        try {
+          if (window.Entities.techWeaponFams) fams = window.Entities.techWeaponFams(abId) || [];
+          else if (window.Entities.techWeaponFam) { const r0 = window.Entities.techWeaponFam(abId); if (r0) fams = [r0]; }
+        } catch (e2) { }
+        if (fams.length) {
           // shield arts demand a worn shield, not a wielded weapon
-          if (req === "shield") {
+          if (fams.length === 1 && fams[0] === "shield") {
             const ok = window.Entities.shieldEquipped ? window.Entities.shieldEquipped(caster) : !!(caster.equipment && caster.equipment.shield);
             if (!ok) {
               if (caster === G.player) try { window.UI.toast(`Requires a shield equipped — wear one to unleash ${ab.name}.`, 3500); } catch (e2) { }
@@ -9696,13 +10073,18 @@ function meleeTreeHit(att, tgt) {
             }
           } else {
           const wield = window.Entities.wieldedFamily ? window.Entities.wieldedFamily(caster) : null;
-          if (wield !== req) {
+          if (fams.indexOf(wield) < 0) {
             if (caster === G.player) {
-              let need = req;
+              let need = fams[0];
               try {
-                if (req === "unarmed") need = "bare fists (default slot empty)";
-                else if (window.CFG.SKILL_TREES && window.CFG.SKILL_TREES[req]) need = "a " + req + " (" + window.CFG.SKILL_TREES[req].name + ") as your default weapon";
-                else need = "a " + req + " as your default weapon";
+                const fmt = (f) => {
+                  if (f === "unarmed") return "bare fists (default slot empty)";
+                  if (window.CFG.SKILL_TREES && window.CFG.SKILL_TREES[f]) return "a " + f + " (" + window.CFG.SKILL_TREES[f].name + ")";
+                  return "a " + f;
+                };
+                need = fams.length > 1 ? fams.map(fmt).join(" or ") : fmt(fams[0]);
+                need += " as your default weapon";
+                if (fams.length === 1 && fams[0] === "unarmed") need = "bare fists (default slot empty)";
               } catch (e2) { }
               try { window.UI.toast(`Requires ${need} — wield it to unleash ${ab.name}.`, 3500); } catch (e2) { }
             }
@@ -9740,7 +10122,7 @@ function meleeTreeHit(att, tgt) {
     const afford = abilityAfford(caster, abId);
     if (!afford) {
       if (caster === G.player) {
-        try { window.UI.toast(ab && ab.kind === "technique" && typeof caster.stamina === "number" ? "Not enough stamina." : "Not enough MP."); } catch (e) { }
+        try { window.UI.toast(ab && ab.kind === "shallow" ? "Not enough MP/stamina." : (ab && ab.kind === "technique" && typeof caster.stamina === "number" ? "Not enough stamina." : "Not enough MP.")); } catch (e) { }
       }
       return false;
     }
@@ -9767,7 +10149,7 @@ function meleeTreeHit(att, tgt) {
     try {
       if (caster === G.player && window.Entities.noteTreeUse) {
         window.Entities.noteTreeUse(caster, abId);
-        if (ab.kind !== "melee" && ab.kind !== "technique") {
+        if (ab.kind !== "melee" && ab.kind !== "technique" && ab.kind !== "shallow") {
           const wf = window.Entities.wieldedFamily ? window.Entities.wieldedFamily(caster) : null;
           if (wf === "wand" || wf === "staff") window.Entities.noteTreeUse(caster, wf);
         }
@@ -9779,11 +10161,11 @@ function meleeTreeHit(att, tgt) {
     try {
       if (caster === G.player && window.MP && window.MP.sendAct) {
         const fx0 = (typeof SPELL_FX !== "undefined" && SPELL_FX[abId]) || {};
-        window.MP.sendAct({ kind: "cast", abId, x: caster.x ?? caster.gx, y: caster.y ?? caster.gy, face: caster.faceAng || 0, color: fx0.color || "#ffffff", snd: ab.kind === "support" ? "heal" : "fire" });
+        window.MP.sendAct({ kind: "cast", abId, x: caster.x ?? caster.gx, y: caster.y ?? caster.gy, face: caster.faceAng || 0, color: fx0.color || "#ffffff", snd: (ab.kind === "support" || ab.kind === "heal" || abId === "shieldwall") ? "heal" : "fire" });
       } else if (caster && caster !== G.player) {
         // simulated caster's flash (mob/NPC/ally on the world sim)
         const fx0 = (typeof SPELL_FX !== "undefined" && SPELL_FX[abId]) || {};
-        mpSendAct({ kind: "cast", abId, x: caster.x ?? caster.gx, y: caster.y ?? caster.gy, face: caster.faceAng || 0, color: fx0.color || "#ffffff", snd: ab.kind === "support" ? "heal" : "fire" });
+        mpSendAct({ kind: "cast", abId, x: caster.x ?? caster.gx, y: caster.y ?? caster.gy, face: caster.faceAng || 0, color: fx0.color || "#ffffff", snd: (ab.kind === "support" || ab.kind === "heal" || abId === "shieldwall") ? "heal" : "fire" });
       }
     } catch (e) { }
     const ang = caster.faceAng || 0;
@@ -9893,6 +10275,9 @@ function meleeTreeHit(att, tgt) {
     else if (ab.kind === "technique") {
       castTechnique(caster, abId, ab, cost);
     }
+    else if (ab.kind === "shallow") {
+      castShallow(caster, abId, ab, cost);
+    }
     else if (ab.kind === "cataclysm") {
       castCataclysm(caster, abId, ab, cost);
     }
@@ -9991,7 +10376,16 @@ function meleeTreeHit(att, tgt) {
   function refundCast(caster, abId, cost, msg) {
     try {
       const ab = (window.CFG && window.CFG.ABILITIES && window.CFG.ABILITIES[abId]) || null;
-      if (ab && ab.kind === "technique" && typeof caster.stamina === "number" && typeof caster.maxStamina === "number") {
+      if (ab && ab.kind === "shallow") {
+        try {
+          let mp = ab.mp || 0, sc = ab.st || 0;
+          try { if (window.Entities.effectiveShallowMpCost) mp = window.Entities.effectiveShallowMpCost(caster, abId); } catch (e2) { }
+          try { if (window.Entities.effectiveShallowStamCost) sc = window.Entities.effectiveShallowStamCost(caster, abId); } catch (e2) { }
+          caster.mp = Math.min(caster.maxMp == null ? (caster.mp || 0) + mp : caster.maxMp, (caster.mp || 0) + mp);
+          if (typeof caster.stamina === "number" && typeof caster.maxStamina === "number") caster.stamina = Math.min(caster.maxStamina, (caster.stamina || 0) + sc);
+          else caster.mp = (caster.mp || 0) + sc;
+        } catch (e2) { caster.mp += cost; }
+      } else if (ab && ab.kind === "technique" && typeof caster.stamina === "number" && typeof caster.maxStamina === "number") {
         let sc = 1.5 * (ab.mp || 0);
         try { sc = window.Entities.effectiveStamCost ? window.Entities.effectiveStamCost(caster, abId) : sc; } catch (e) { }
         caster.stamina = Math.min(caster.maxStamina, (caster.stamina || 0) + sc);
@@ -10798,6 +11192,240 @@ function meleeTreeHit(att, tgt) {
     if (abId === "shadow_disciples") return castShadowDisciples(caster, ab, cost);
     return refundCast(caster, abId, cost, "That Deep Art fizzles.");
   }
+  // ---- shallow arts: light dual-cost arts (a little MP + a little stamina) ----
+  // Less power than deep arts, usable far more often. Each art earns its own
+  // skill tree by casting (5 casts = 1 point). Fizzled casts refund both costs.
+  function castShallow(caster, abId, ab, cost) {
+    const cx = caster.x ?? caster.gx, cy = caster.y ?? caster.gy;
+    const masteryT = (() => { try { return window.Entities.hasMastery(caster, abId); } catch (e) { return false; } })();
+    let srcId = null;
+    try { srcId = (caster === G.player) ? "player" : (caster.id || null); } catch (e) { }
+    const srcName = (caster && caster.name) || null;
+    const note = (x, y, s, c) => { try { addDmgNum(x, y, s, c); } catch (e) { } };
+    const pw = (() => { try { return techArtMult(caster, abId); } catch (e) { return 1; } })();
+    const wScale = (() => { try { return window.Entities.techWeaponScale ? window.Entities.techWeaponScale(caster, abId) : 1; } catch (e) { return 1; } })();
+    const famOf = (def, fb) => {
+      try {
+        const fams = window.Entities.techWeaponFams ? window.Entities.techWeaponFams(abId) : [];
+        if (fams && fams.length) return fams[0];
+      } catch (e) { }
+      return fb;
+    };
+    const hitFoe = (f, mult, o) => {
+      const d2 = Math.max(1, Math.round(combatDmg(caster, "strike", f) * mult * pw * wScale));
+      dealDamage(caster, f, d2, o);
+      try { if (typeof meleeTreeHit === "function") meleeTreeHit(caster, f); } catch (e) { }
+      return d2;
+    };
+    // ---- Flowing Strikes: watery flurry + slow ----
+    if (abId === "flowing_strikes") {
+      const reach = (ab && ab.range) || 2.6;
+      const anchorF = nearestFoeOf(caster, cx, cy, reach + 0.4);
+      if (!anchorF) return refundCast(caster, abId, cost, "No foe in reach.");
+      const fx = anchorF.x ?? anchorF.gx, fy = anchorF.y ?? anchorF.gy;
+      const n = masteryT ? 5 : 4, mult = 1.5;
+      for (let i = 0; i < n; i++) {
+        if (anchorF.hp <= 0) break;
+        hitFoe(anchorF, mult, { color: "#4fc3ef", el: "water", fam: "unarmed", move: abId, slow: true, slowMs: masteryT ? 4000 : 3000 });
+      }
+      try {
+        for (let i = 0; i < n; i++) G.particles.push({ x: fx, y: fy, t: 0, life: 0.16, color: "#4fc3ef", kind: "thrust", ang: (caster.faceAng || 0) + (Math.random() - 0.5), dist: 1.2 });
+        G.particles.push({ x: fx, y: fy, t: 0, life: 0.35, color: "#4fc3ef", kind: "ring" });
+        addParticles(fx, fy, "#4fc3ef", 8);
+      } catch (e) { }
+      note(fx, fy, "flowing!", "#4fc3ef");
+      try { window.Sfx.swing(); } catch (e) { }
+      return true;
+    }
+    // ---- Faux Chop: rough cut + bleed (axe/sword/dagger) ----
+    if (abId === "faux_chop") {
+      const reach = (ab && ab.range) || 2.6;
+      const anchorF = nearestFoeOf(caster, cx, cy, reach + 0.4);
+      if (!anchorF) return refundCast(caster, abId, cost, "No foe in reach.");
+      const fx = anchorF.x ?? anchorF.gx, fy = anchorF.y ?? anchorF.gy;
+      const fam = famOf(0, "axe");
+      hitFoe(anchorF, 3, { color: "#ff5e7a", el: "physical", fam, move: abId });
+      try {
+        if (anchorF.hp > 0 && window.Status) {
+          if (window.Status.apply(anchorF, "bleed", { pct: masteryT ? 0.03 : 0.02, durationMs: masteryT ? 12000 : 8000, srcName, srcId })) note(fx, fy - 0.5, "Bleeding", "#ff5e7a");
+        }
+      } catch (e) { }
+      try {
+        const a0 = caster.faceAng || 0;
+        G.particles.push({ x: cx, y: cy, t: 0, life: 0.3, color: "#ff5e7a", kind: "arc", ang: a0, lw: 6, r: 1.8 });
+        addParticles(fx, fy, "#ff5e7a", 8);
+      } catch (e) { }
+      note(fx, fy, "CHOP!", "#ff5e7a");
+      try { window.Sfx.swing(); } catch (e) { }
+      return true;
+    }
+    // ---- One-Armed Guard: catch blows, answer with them ----
+    if (abId === "one_armed_guard") {
+      const dur = masteryT ? 4 : 3;
+      try {
+        caster.shallowGuardUntil = performance.now() / 1000 + dur;
+        caster.shallowGuardPool = 0;
+      } catch (e) { }
+      try {
+        G.particles.push({ x: cx, y: cy, t: 0, life: 0.4, color: "#bfe9ff", kind: "ring" });
+        G.particles.push({ x: cx, y: cy, t: 0, life: dur, color: "#bfe9ff", kind: "bubble", r: 1.3 });
+        addParticles(cx, cy, "#bfe9ff", 10);
+      } catch (e) { }
+      note(cx, cy - 1, "GUARD!", "#bfe9ff");
+      if (caster === G.player) try { window.UI.toast(masteryT ? "One-Armed Guard! Catching blows for 4s — then you answer." : "One-Armed Guard! Catching blows for 3s — then you answer.", 3000); } catch (e) { }
+      try { if (window.Sfx.clang) window.Sfx.clang(); else window.Sfx.swing(); } catch (e) { }
+      try {
+        const self = caster;
+        setTimeout(() => {
+          try {
+            if (!self || self.hp <= 0) return;
+            const pool = Math.max(0, Math.round(self.shallowGuardPool || 0));
+            try { self.shallowGuardUntil = 0; self.shallowGuardPool = 0; } catch (e2) { }
+            const sx = self.x ?? self.gx, sy = self.y ?? self.gy;
+            if (sx == null) return;
+            if (!(pool > 0)) { note(sx, sy - 1, "unanswered", "#9aa4ae"); return; }
+            const foe = nearestFoeOf(self, sx, sy, 3.4);
+            if (!foe || foe.hp <= 0) { note(sx, sy - 1, "+" + pool + " caught, no foe", "#bfe9ff"); return; }
+            dealDamage(self, foe, pool, { color: "#ffe27f", el: "physical", fam: "unarmed", move: "one_armed_guard" });
+            try { if (typeof meleeTreeHit === "function") meleeTreeHit(self, foe); } catch (e2) { }
+            note(sx, sy - 1, "ANSWER " + pool + "!", "#ffe27f");
+            try { window.Sfx.swing(); } catch (e2) { }
+          } catch (e2) { }
+        }, dur * 1000);
+      } catch (e) { }
+      return true;
+    }
+    // ---- weapon-family shallow arts (arc / sunder bashes) ----
+    if (abId === "glancing_arc" || abId === "splinter_hewn" || abId === "brace_bash") {
+      const reach = (ab && ab.range) || 2.6;
+      const anchorF = nearestFoeOf(caster, cx, cy, reach + 0.4);
+      if (!anchorF) return refundCast(caster, abId, cost, "No foe in reach.");
+      const fam = abId === "glancing_arc" ? "sword" : abId === "splinter_hewn" ? "axe" : "shield";
+      const mult = abId === "splinter_hewn" && masteryT ? 3.5 : 2.5;
+      const col = abId === "glancing_arc" ? "#bfe9ff" : abId === "splinter_hewn" ? "#ffb52e" : "#d8f4ff";
+      let smote = 0;
+      for (const f of allFighters()) {
+        if (!f || f === caster || f.hp <= 0) continue;
+        try { if (isAlly(caster, f)) continue; } catch (e) { continue; }
+        try { if (f.submerged && !f.corpse) continue; try { if (isVoidHidden(f)) continue; } catch (e9) {} } catch (e) { }
+        const fx = f.x ?? f.gx, fy = f.y ?? f.gy;
+        if (fx == null) continue;
+        const d = Math.hypot(fx - cx, fy - cy);
+        if (abId === "glancing_arc") {
+          if (d > reach) continue;
+          const da0 = Math.abs(Math.atan2(fy - cy, fx - cx) - (caster.faceAng || 0));
+          const da = da0 > Math.PI ? 2 * Math.PI - da0 : da0;
+          if (d > 0.7 && da > 1.2) continue;
+        } else if (d > reach) continue;
+        hitFoe(f, mult, { color: col, el: "physical", fam, move: abId });
+        smote++;
+        try {
+          if (f.hp > 0 && window.Status && abId !== "glancing_arc") {
+            if (window.Status.apply(f, "sunder", { defDown: masteryT ? 10 : 6, durationMs: masteryT ? 8000 : 6000, srcName, srcId })) note(fx, fy - 0.5, "Sundered", "#e0aaff");
+          }
+        } catch (e) { }
+      }
+      if (!smote) return refundCast(caster, abId, cost, "No foe in reach.");
+      try {
+        const a0 = caster.faceAng || 0;
+        G.particles.push({ x: cx, y: cy, t: 0, life: 0.35, color: col, kind: "arc", ang: a0, lw: 7, r: 2 });
+        G.particles.push({ x: cx, y: cy, t: 0, life: 0.3, color: col, kind: "ring" });
+      } catch (e) { }
+      note(cx, cy - 1, abId === "glancing_arc" ? "ARC!" : abId === "splinter_hewn" ? "HEWN!" : "BASH!", col);
+      try { window.Sfx.swing(); } catch (e) { }
+      return true;
+    }
+    if (abId === "wasp_sting" || abId === "knockback_tap" || abId === "short_lunge" || abId === "wrist_snap") {
+      const reach = (ab && ab.range) || 2.6;
+      const anchorF = nearestFoeOf(caster, cx, cy, reach + 0.4);
+      if (!anchorF) return refundCast(caster, abId, cost, "No foe in reach.");
+      const fx = anchorF.x ?? anchorF.gx, fy = anchorF.y ?? anchorF.gy;
+      const fam = abId === "wasp_sting" ? "dagger" : abId === "knockback_tap" ? "hammer" : abId === "short_lunge" ? "spear" : "whip";
+      const mult = abId === "wasp_sting" ? 2 : abId === "knockback_tap" ? 3.5 : abId === "short_lunge" ? 3 : 2.5;
+      const col = abId === "wasp_sting" ? "#7ddf6b" : abId === "knockback_tap" ? "#ffb52e" : abId === "short_lunge" ? "#7fd6ff" : "#e8d9a0";
+      hitFoe(anchorF, mult, { color: col, el: abId === "wasp_sting" ? "nature" : "physical", fam, move: abId });
+      try {
+        if (anchorF.hp > 0 && window.Status) {
+          if (abId === "wasp_sting") {
+            if (window.Status.apply(anchorF, "poison", { pct: masteryT ? 0.04 : 0.03, potency: 1, srcName, srcId })) note(fx, fy - 0.5, "Envenomed", col);
+          } else if (abId === "knockback_tap") {
+            if (window.Status.apply(anchorF, "stun", { duration: masteryT ? 1.5 : 1, srcName, srcId })) note(fx, fy - 0.5, "Stunned", col);
+          } else if (abId === "wrist_snap") {
+            if (window.Status.apply(anchorF, "stun", { duration: masteryT ? 1 : 0.5, srcName, srcId })) note(fx, fy - 0.5, "Stunned", col);
+          }
+        }
+      } catch (e) { }
+      try {
+        G.particles.push({ x: fx, y: fy, t: 0, life: 0.3, color: col, kind: "ring" });
+        G.particles.push({ x: cx, y: cy, t: 0, life: 0.3, color: col, kind: "arc", ang: caster.faceAng || 0, lw: 6, r: 1.6 });
+        addParticles(fx, fy, col, 8);
+      } catch (e) { }
+      note(fx, fy, abId === "wasp_sting" ? "sting!" : abId === "knockback_tap" ? "TAP!" : abId === "short_lunge" ? "LUNGE!" : "SNAP!", col);
+      try { window.Sfx.swing(); } catch (e) { }
+      return true;
+    }
+    // ---- Twin Nock: two piercing arrows, none spent ----
+    if (abId === "twin_nock") {
+      const base = Math.max(1, Math.round(combatDmg(caster, "strike", null) * wScale));
+      const mult = 2 * pw;
+      const ang = caster.faceAng || 0;
+      const n = masteryT ? 3 : 2;
+      const from = caster === G.player ? "player" : (caster.inParty ? "ally" : "enemy");
+      for (let i = 0; i < n; i++) {
+        const a = ang + (n === 1 ? 0 : (i - (n - 1) / 2) * 0.12);
+        G.projectiles.push({
+          x: cx + Math.cos(a), y: cy + Math.sin(a) - 0.2,
+          vx: Math.cos(a) * 13, vy: Math.sin(a) * 13,
+          life: 9 / 13, from, src: caster,
+          dmg: Math.max(1, Math.round(base * mult)), abId: "twin_nock", mastery: masteryT, magic: true,
+          color: "#d8f4ff", shape: "dart", size: 1.3, core: "#ffffff", glow: "#7fc4ff",
+          trail: ["#d8f4ff", "#7fc4ff"], trailAcc: 0, pass: true, hit: [],
+          waveR: 0, splash: null, boom: { ring: "#d8f4ff", n: 6 },
+          el: "physical", fam: "bow",
+        });
+      }
+      try {
+        G.particles.push({ x: cx, y: cy, t: 0, life: 0.3, color: "#d8f4ff", kind: "ring" });
+        addParticles(cx + Math.cos(ang), cy + Math.sin(ang), "#d8f4ff", 8);
+      } catch (e) { }
+      note(cx, cy - 1, "TWIN NOCK!", "#d8f4ff");
+      try { if (window.Sfx.fire) window.Sfx.fire(); else window.Sfx.swing(); } catch (e) { }
+      return true;
+    }
+    // ---- Palm Star: two stars from the palm, one consumed ----
+    if (abId === "palm_star") {
+      let sid = null;
+      try { if (window.Items && window.Items.bestShuriken) sid = window.Items.bestShuriken(caster); } catch (e) { }
+      if (!sid) return refundCast(caster, abId, cost, "Need shurikens — cast some (🔨 Crafting).");
+      const sdef = window.Items.ITEMS[sid];
+      try { window.Items.removeItem(caster, sid, 1); } catch (e) { }
+      const base = (() => { try { return shurikenDamage(caster, sdef); } catch (e) { return 8; } })();
+      const dmg = Math.max(1, Math.round(base * 2 * pw));
+      const ang = caster.faceAng || 0;
+      const n = masteryT ? 3 : 2;
+      const from = caster === G.player ? "player" : (caster.inParty ? "ally" : "enemy");
+      for (let si = 0; si < n; si++) {
+        const sa = ang + (si - (n - 1) / 2) * 0.14;
+        G.projectiles.push({
+          x: cx + Math.cos(sa), y: cy + Math.sin(sa) - 0.2,
+          vx: Math.cos(sa) * 13, vy: Math.sin(sa) * 13,
+          life: 9 / 13, from, src: caster, dmg, abId: "palm_star", mastery: masteryT, magic: true,
+          color: "#d7dee8", shape: "dart", size: 1.3, core: "#ffffff", glow: "#9aa4ae",
+          trail: ["#d7dee8", "#9aa4ae"], trailAcc: 0, pass: false, hit: [],
+          waveR: 0, splash: null, boom: { ring: "#d7dee8", n: 6 },
+          el: "physical", fam: "thrown",
+        });
+      }
+      try {
+        G.particles.push({ x: cx, y: cy, t: 0, life: 0.3, color: "#d7dee8", kind: "ring" });
+        addParticles(cx + Math.cos(ang), cy + Math.sin(ang), "#d7dee8", 8);
+      } catch (e) { }
+      note(cx, cy - 1, "STARS!", "#d7dee8");
+      try { if (window.Sfx.fire) window.Sfx.fire(); else window.Sfx.swing(); } catch (e) { }
+      return true;
+    }
+    return refundCast(caster, abId, cost, "That Shallow Art fizzles.");
+  }
   // ---- locust swarm: the taming art ----
   // Untouchable locusts (pure particles — nothing can target or hurt them)
   // orbit the caster and leech life off nearby foes, feeding the drained
@@ -11451,6 +12079,13 @@ function meleeTreeHit(att, tgt) {
       try { if (caster === G.player && window.Entities.noteTreeUse) window.Entities.noteTreeUse(caster, "feint_attack"); } catch (e) { }
     }
     st.left = (st.left | 0) - 1;
+    // multiplayer: each dash flashes on other screens (castAbility returns
+    // early for feint chains, so this never sent the usual flash)
+    try {
+      const fevt = { kind: "cast", abId, x: caster.x ?? caster.gx, y: caster.y ?? caster.gy, face: caster.faceAng || 0, color: "#dfe9ff", snd: "fire" };
+      if (caster === G.player && window.MP && window.MP.sendAct) window.MP.sendAct(fevt);
+      else if (caster && caster !== G.player) mpSendAct(fevt);
+    } catch (eF) { }
     doFeintDash(caster);
     if ((st.left | 0) <= 0) {
       // last dash spent: the cooldown starts NOW
@@ -11576,6 +12211,9 @@ function meleeTreeHit(att, tgt) {
         return out;
       };
       const note = (x, y, s, c) => { try { addDmgNum(x, y, s, c); } catch (e) { } };
+      // multiplayer burst anchor: most releases detonate on the caster, but
+      // the volcano erupts at its aim point — receivers replay it there.
+      let cataX = cx, cataY = cy, cataR = 2;
       if (abId === "tidal_wave") {
         // the caster CLIMBS the wave: a wall of water carries them down the
         // facing line, crushing everything in the foam (tickWaveRide drives
@@ -11603,6 +12241,7 @@ function meleeTreeHit(att, tgt) {
         // everything down the line eats the storm (paralyzed victims take double)
         const len = mastery ? 13 : 10, halfW = 1.4;
         const dx = Math.cos(ang0), dy = Math.sin(ang0);
+        cataR = len;
         const dmg = Math.max(1, combatDmg(p, abId, { def: 0 }));
         let struck = 0;
         for (const f of foesNear(len + 1)) {
@@ -11641,6 +12280,7 @@ function meleeTreeHit(att, tgt) {
         const targets = foesNear(6.5);
         for (let i = targets.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; const tmp = targets[i]; targets[i] = targets[j]; targets[j] = tmp; }
         const rain = targets.slice(0, mastery ? 8 : 6);
+        cataR = 6.5;
         const dmg = Math.max(1, combatDmg(p, abId, { def: 0 }));
         for (const f of rain) {
           const fx = f.x ?? f.gx, fy = f.y ?? f.gy;
@@ -11673,6 +12313,7 @@ function meleeTreeHit(att, tgt) {
       } else if (abId === "whiteout") {
         // the blizzard goes out in every direction and stays awhile
         const r = mastery ? 6.5 : 5;
+        cataR = r;
         const dmg = Math.max(1, combatDmg(p, abId, { def: 0 }));
         let caught = 0;
         for (const f of foesNear(r)) {
@@ -11706,6 +12347,7 @@ function meleeTreeHit(att, tgt) {
         // the caster becomes the eye: a vast storm that hurls everything
         // around them outward. Mastery: wider eye, longer lashing.
         const r = mastery ? 7.5 : 6;
+        cataR = r;
         const dmg = Math.max(1, combatDmg(p, abId, { def: 0 }));
         let caught = 0;
         for (const f of foesNear(r)) {
@@ -11762,6 +12404,7 @@ function meleeTreeHit(att, tgt) {
       } else if (abId === "storm_of_blades") {
         // the gale learns to hunt: homing blades chase foes and hurl each one
         const n = mastery ? 7 : 5;
+        cataR = 3.2;
         const dmg = Math.max(1, combatDmg(p, abId, { def: 0 }));
         const a0 = Math.random() * Math.PI * 2;
         for (let i = 0; i < n; i++) {
@@ -11786,6 +12429,7 @@ function meleeTreeHit(att, tgt) {
         try { window.Sfx.swing(); window.Sfx.level(); } catch (e) { }
       } else if (abId === "primordial_sea") {
         // the deep wakes hungry: hunting whirlpools drag foes down
+        cataR = 3.4;
         const dmg = Math.max(1, combatDmg(p, abId, { def: 0 }));
         for (let i = 0; i < 3; i++) {
           const a = ang0 + (i / 3) * Math.PI * 2;
@@ -11811,6 +12455,7 @@ function meleeTreeHit(att, tgt) {
         // the mountain answers: a volcano that spouts lava at nearby foes
         const abR = (((window.CFG || {}).ABILITIES || {})[abId] || {}).range || 6.5;
         const ap = aimPoint(p, abR);
+        cataX = ap.x; cataY = ap.y; cataR = 3;
         const dmg = Math.max(1, combatDmg(p, abId, { def: 0 }));
         spawnHazard({ x: ap.x, y: ap.y, r: 1.4, pulseR: 3.0, until: performance.now() + 8000, tick: 0.8, src: p, abId, dmg, el: "fire", fam: "spell", color: "#ff7b2e" });
         try {
@@ -11859,6 +12504,7 @@ function meleeTreeHit(att, tgt) {
       } else if (abId === "crystal_prison") {
         // winter closes in: the ground freezes and spikes rise and fall
         const r = mastery ? 6 : 5;
+        cataR = r;
         const dmg = Math.max(1, combatDmg(p, abId, { def: 0 }));
         spawnHazard({ x: cx, y: cy, r, until: performance.now() + 3000, tick: 0.25, slipZone: true, freezeCh: mastery ? 0.5 : 0.35, src: p, abId, dmg, el: "ice", fam: "spell", color: "#bfe9ff" });
         try {
@@ -11882,6 +12528,7 @@ function meleeTreeHit(att, tgt) {
       } else if (abId === "burning_light") {
         // the caster becomes the dawn: holy fire burns and blinds the near
         const r = mastery ? 6 : 5;
+        cataR = r;
         const dmg = Math.max(1, combatDmg(p, abId, { def: 0 }));
         spawnHazard({ x: cx, y: cy, r, until: performance.now() + 4000, tick: 0.5, followCaster: true, src: p, abId, dmg, el: "holy", fam: "spell", color: "#ffe27f" });
         try {
@@ -11902,6 +12549,7 @@ function meleeTreeHit(att, tgt) {
         // toxic spikes wreath the caster; touch spreads the plague
         const dmg = Math.max(1, combatDmg(p, abId, { def: 0 }));
         p.plagueSpikes = { until: performance.now() + 8000, dmg };
+        cataR = 2.4;
         try {
           try { addFlash("#7ddf6b", 120); addShake(7, 350); } catch (e2) { }
           G.particles.push({ x: cx, y: cy, t: 0, life: 0.9, color: "#7ddf6b", kind: "bubble", r: 1.6 });
@@ -11919,6 +12567,7 @@ function meleeTreeHit(att, tgt) {
         // a dark star is born: it zips around its master, wounding the blind
         const dmg = Math.max(1, combatDmg(p, abId, { def: 0 }));
         spawnOrb({ x: cx + 2.2, y: cy, mode: "orbit", ang: ang0, angSpd: 3.2, radius: 2.2, trail: ["#c9a7ff", "#5a2b9a"], src: p, abId, dmg, el: "holy", color: "#c9a7ff", until: performance.now() + 5000 });
+        cataR = 3.4;
         try {
           try { addFlash("#2a1b3d", 160); addShake(9, 450); } catch (e2) { }
           G.particles.push({ x: cx, y: cy, t: 0, life: 0.9, color: "#5a2b9a", kind: "bubble", r: 2.4 });
@@ -11938,6 +12587,7 @@ function meleeTreeHit(att, tgt) {
         // the red reap: three waves over three seconds, feeding the caster
         const dmg = Math.max(1, combatDmg(p, abId, { def: 0 }));
         spawnHazard({ x: cx, y: cy, r: 6, until: performance.now() + 3200, tick: 1.0, followCaster: true, src: p, abId, dmg, el: "holy", fam: "spell", color: "#ff5e7a" });
+        cataR = 6;
         try {
           try { addFlash("#ff5e7a", 150); addShake(9, 450); } catch (e2) { }
           G.particles.push({ x: cx, y: cy, t: 0, life: 1.0, color: "#ff5e7a", kind: "bubble", r: 2.0 });
@@ -11959,6 +12609,16 @@ function meleeTreeHit(att, tgt) {
         note(cx, cy - 1.2, "BLOOD HOLE!", "#ff5e7a");
         try { window.Sfx.fire(); window.Sfx.level(); } catch (e) { }
       }
+      // multiplayer: the release burst shows on other screens (visual-only;
+      // lingering zones ride their own hazard messages, orbs ride orb ones).
+      try {
+        if (abId && isFinite(+cataX) && isFinite(+cataY)) {
+          const cataCol = { tidal_wave: "#4fc3ef", energy_beam: "#fff7ae", meteorfall: "#ff7b2e", whiteout: "#e8f7ff", hurricane: "#d8f0e4", storm_of_blades: "#bfe3ff", primordial_sea: "#4fc3ef", raging_volcano: "#ff7b2e", crystal_prison: "#bfe9ff", burning_light: "#ffe27f", barbed_plague: "#7ddf6b", void_hole: "#c9a7ff", blood_hole: "#ff5e7a" }[abId] || "#ffffff";
+          const cevt = { kind: "cata", abId, x: cataX, y: cataY, face: ang0, r: cataR || 2, color: cataCol };
+          if (p === G.player) { try { if (window.MP && window.MP.sendAct) window.MP.sendAct(cevt); } catch (eS) { } }
+          else mpSendAct(cevt);
+        }
+      } catch (eC) { }
       if (p === G.player) { try { window.UI.updateHUD(); window.UI.updateHotbar(); } catch (e) { } }
     } catch (e) { }
   }
@@ -12012,8 +12672,8 @@ function meleeTreeHit(att, tgt) {
       }
     } catch (err) { }
     // surf-and-slash: holding attack through the ride hurls weapon swings
-    // down the foam line at flurry cadence (stamina still applies; unarmed
-    // riders just splash). tryMelee(forceRide) bypasses the surf lock only.
+    // down the foam line at flurry cadence (reduced flurry stamina still applies;
+    // unarmed riders just splash). tryMelee(forceRide) bypasses the surf lock only.
     try {
       if (e === G.player && G.mouse.down && G.attackCd <= 0 && e.hp > 0 && !isFrozenEnt(e)) {
         tryMelee(e, false, true, true);
@@ -12028,6 +12688,13 @@ function meleeTreeHit(att, tgt) {
       if (w.ringT > 0.18) {
         w.ringT = 0;
         G.particles.push({ x: e.x, y: e.y, t: 0, life: 0.4, color: "#d8f4ff", kind: "ring" });
+        // multiplayer: receivers puff foam under the remote rider (the hero
+        // itself moves via pos sync — this only carries the water).
+        try {
+          const wevt = { kind: "wave", x: e.x, y: e.y, ang: Math.atan2(w.dy, w.dx), r: w.radius || 1.8 };
+          if (e === G.player) { try { if (window.MP && window.MP.sendAct) window.MP.sendAct(wevt); } catch (eS) { } }
+          else mpSendAct(wevt);
+        } catch (eW) { }
       }
     } catch (err) { }
     // pushing squarely into a wall with no progress: break against it
@@ -12059,8 +12726,59 @@ function meleeTreeHit(att, tgt) {
   // G.orbs: flying spell bodies {x,y,vx,vy,mode,src,abId,dmg,until,...}
   // Barbed-plague carriers ride victim.plagueUntil + victim.plagueSrcRef.
   function fxSrcId(src) { try { return (src === G.player) ? "player" : (src && src.id) || null; } catch (e) { return null; } }
-  function spawnHazard(h) { try { G.hazards = G.hazards || []; h.until = h.until || (performance.now() + 4000); h.acc = 0; G.hazards.push(h); return h; } catch (e) { return null; } }
-  function spawnOrb(o) { try { G.orbs = G.orbs || []; o.until = o.until || (performance.now() + 4000); o.acc = 0; G.orbs.push(o); return o; } catch (e) { return null; } }
+  function spawnHazard(h) {
+    try {
+      G.hazards = G.hazards || []; h.until = h.until || (performance.now() + 4000); h.acc = 0; G.hazards.push(h);
+      // multiplayer: lingering spellfields show on other screens too
+      // (visual-only replicas — src null + dmg 0 there, wounds stay here).
+      // Covers every zone: whirlpools, fire-lines, volcano vents, ice
+      // sheets, dawn domes, blood moons. Replicas never re-announce.
+      try {
+        if (h && !h.visual && h.abId) {
+          let lifeS = 0;
+          try { lifeS = Math.max(0.5, Math.min(9, ((h.until || 0) - performance.now()) / 1000)); } catch (eL) { lifeS = 0; }
+          if (lifeS > 0 && isFinite(+h.x) && isFinite(+h.y)) {
+            const hevt = { kind: "hazard", abId: h.abId, x: h.x, y: h.y, r: h.r || 1.6, color: h.color || "#ffffff", life: lifeS };
+            if (h.pulseR) hevt.pulseR = h.pulseR;
+            if (isFinite(+h.ang)) hevt.ang = +h.ang;
+            if (isFinite(+h.seed)) hevt.seed = +h.seed;
+            if (h.followCaster) hevt.follow = true;
+            if (h.src === G.player) { try { if (window.MP && window.MP.sendAct) window.MP.sendAct(hevt); } catch (eS) { } }
+            else mpSendAct(hevt);
+          }
+        }
+      } catch (eA) { }
+      return h;
+    } catch (e) { return null; }
+  }
+  function spawnOrb(o) {
+    try {
+      G.orbs = G.orbs || []; o.until = o.until || (performance.now() + 4000); o.acc = 0; G.orbs.push(o);
+      // multiplayer: hunting/orbiting spell bodies (storm blades, void hole)
+      // fly on other screens too — visual-only, no wounds there.
+      try {
+        if (o && !o.visual && o.abId) {
+          let lifeS = 0;
+          try { lifeS = Math.max(0.5, Math.min(9, ((o.until || 0) - performance.now()) / 1000)); } catch (eL) { lifeS = 0; }
+          if (lifeS > 0 && isFinite(+o.x) && isFinite(+o.y)) {
+            const oevt = { kind: "orb", abId: o.abId, x: o.x, y: o.y, vx: o.vx || 0, vy: o.vy || 0, mode: o.mode || "homing", color: o.color || "#ffffff", trail: o.trail || null, life: lifeS };
+            if (o.mode === "orbit") {
+              if (isFinite(+o.ang)) oevt.ang = +o.ang;
+              if (isFinite(+o.angSpd)) oevt.angSpd = +o.angSpd;
+              if (isFinite(+o.radius)) oevt.radius = +o.radius;
+              try {
+                const scx = (o.src && (o.src.x ?? o.src.gx)), scy = (o.src && (o.src.y ?? o.src.gy));
+                if (isFinite(+scx) && isFinite(+scy)) { oevt.ox = +scx; oevt.oy = +scy; }
+              } catch (eC) { }
+            }
+            if (o.src === G.player) { try { if (window.MP && window.MP.sendAct) window.MP.sendAct(oevt); } catch (eS) { } }
+            else mpSendAct(oevt);
+          }
+        }
+      } catch (eA) { }
+      return o;
+    } catch (e) { return null; }
+  }
   function foeOf(src, f) {
     if (!f || f === src || f.hp <= 0) return false;
     try { if (isAlly(src, f)) return false; } catch (e) { return false; }
@@ -12134,6 +12852,16 @@ function meleeTreeHit(att, tgt) {
     for (const h of G.hazards) {
       if (!h || h.dead) continue;
       if (now >= h.until) { h.dead = true; continue; }
+      // visual-only replica glued to its caster's remote hero (dawn domes,
+      // blood moons ride along instead of freezing at the cast point).
+      if (h.visual && h.followHash) {
+        try {
+          const rs = (window.MP && window.MP.getRemotes) ? window.MP.getRemotes() : [];
+          for (const r of (rs || [])) {
+            if (r && String(r.remoteHash || "").toLowerCase() === h.followHash && isFinite(+r.x) && isFinite(+r.y)) { h.x = +r.x; h.y = +r.y; break; }
+          }
+        } catch (e) { }
+      }
       const src = h.src;
       try {
         if (h.followCaster && src && src.hp > 0) { h.x = src.x ?? h.x; h.y = src.y ?? h.y; }
@@ -12329,6 +13057,26 @@ function meleeTreeHit(att, tgt) {
     for (const o of G.orbs) {
       if (!o || o.dead) continue;
       if (now >= o.until) { o.dead = true; continue; }
+      // visual-only replica (another machine's blades/hole): flies its path
+      // and trails sparks, never wounds, never dies of homesickness.
+      if (o.visual) {
+        try {
+          if (o.mode === "orbit") {
+            o.ang = (o.ang || 0) + (o.angSpd || 3.2) * dt;
+            const ocx = (o.ox != null && isFinite(+o.ox)) ? +o.ox : o.x;
+            const ocy = (o.oy != null && isFinite(+o.oy)) ? +o.oy : o.y;
+            o.x = ocx + Math.cos(o.ang) * (o.radius || 2.2);
+            o.y = ocy + Math.sin(o.ang) * (o.radius || 2.2);
+            if (Math.random() < dt * 20) G.particles.push({ x: o.x + (Math.random() - 0.5) * 1.2, y: o.y + (Math.random() - 0.5) * 1.2, t: 0, life: 0.3, color: Math.random() < 0.6 ? (o.color || "#ffffff") : "#0a0614" });
+          } else {
+            o.x += (o.vx || 0) * dt; o.y += (o.vy || 0) * dt;
+            try { if (typeof projBlocked === "function" && projBlocked(o.x, o.y)) { o.dead = true; continue; } } catch (e) { }
+            o.acc = (o.acc || 0) + dt * 42;
+            while (o.acc >= 1) { o.acc -= 1; G.particles.push({ x: o.x, y: o.y, t: 0, life: 0.25, color: (o.trail && o.trail[0]) || o.color || "#ffffff" }); }
+          }
+        } catch (e) { }
+        continue;
+      }
       const src = o.src;
       if (!src || src.hp <= 0) { o.dead = true; continue; }
       if (o.mode === "orbit") {
@@ -13665,6 +14413,16 @@ function meleeTreeHit(att, tgt) {
         try { if (window.Sfx.clang) window.Sfx.clang(); else window.Sfx.hit(); } catch (e) { }
         return { dmg: 0, parried: true, reflected: true, mirror: true };
       }
+      // One-Armed Guard: the shallow guard catches everything and banks it
+      // for the riposte (castShallow releases the pool when the window ends).
+      try {
+        if ((tgt.shallowGuardUntil || 0) > now && tgt.hp > 0 && dmg > 0) {
+          tgt.shallowGuardPool = (tgt.shallowGuardPool || 0) + Math.max(1, Math.round(dmg));
+          try { parryClashFX(tgt, src, "weapon", opts); } catch (e2) { }
+          try { if (window.Sfx.clang) window.Sfx.clang(); else window.Sfx.hit(); } catch (e2) { }
+          return { dmg: 0, parried: true, guarded: true, shallow: true };
+        }
+      } catch (eHook) { }
       const manual = (tgt.parryUntil || 0) > now;
       let auto = false;
       if (!manual) {
@@ -14868,7 +15626,7 @@ function takeAltarBlessing() {
         try {
           const C = window.CFG;
           T = C.MOB_TEMPLATES.goddess = {
-            name: "Goddess of Dawn", hp: 8225, mp: 850, atk: 110, def: 4, spd: 4.8,
+            name: "Goddess of Dawn", hp: 8225, mp: 850, atk: 330, def: 4, spd: 4.8,
             xp: 8000, abilities: ["holy_sword", "smite", "blessed_weapon", "heal", "panacea", "whiteout"],
             tint: "#ffe9a8", body: "humanoid", boss: true, heavenBoss: true,
           };
@@ -15628,10 +16386,11 @@ function takeAltarBlessing() {
       if (!npc) return;
       // pin the delve level onto the town-country body (delvers match the deep)
       try {
-        const st = window.Entities.makeNpcStatBlock(lv, role, 120);
+        const st = window.Entities.makeNpcStatBlock(lv, role, 120, { abilities: npc.abilities, weapon: (npc.equipment && npc.equipment.weapon) || null, armor: (npc.equipment && npc.equipment.armor) || null });
         npc.lv = lv; npc.maxHp = st.maxHp; npc.maxMp = st.maxMp;
         npc.atk = st.atk; npc.matk = st.matk; npc.def = st.def;
         npc.hp = npc.maxHp; npc.mp = npc.maxMp;
+        if (st.maxStamina) { npc.maxStamina = st.maxStamina; npc.stamina = st.stamina; }
       } catch (e) { }
       npc.dungeonId = d.id;
       try { npc.recruitable = true; } catch (e) { }
@@ -16764,11 +17523,11 @@ function takeAltarBlessing() {
     try {
       const B = (window.CFG && window.CFG.BOSS_KINDS) || [];
       const T = (window.CFG && window.CFG.MOB_TEMPLATES) || {};
-      // v205 5% boss roll: hell warlords OR high-tier surface bosses only.
-      // Hell = every hell warlord (base four + all 30 HellMobs bosses);
-      // surface = warlords at min-eff 4+ (oni/tengu/kitsune/naga/rakshasa/
-      // siege/scorpion/dullahan/baba/wyvern/jotunn/hydra/fenrir/void —
-      // never starter-crypt tier). Floor-standable only (no divers).
+     // v205 5% boss roll: hell warlords OR high-tier surface bosses only.
+     // Hell = every hell warlord (base four + all 30 HellMobs bosses);
+     // surface = warlords at min-eff 4+ (oni/tengu/kitsune/naga/rakshasa/
+      // siege/scorpion/dullahan/baba/wyvern/jotunn/hydra/void —
+     // never starter-crypt tier). Floor-standable only (no divers).
       const hellBosses = ((window.CFG && window.CFG.HELL_BOSS_KINDS) || [])
         .concat((window.HellMobs && window.HellMobs.BOSSES) || []);
       const minEff = (window.CFG && window.CFG.BOSS_MIN_EFF) || {};
@@ -17833,7 +18592,7 @@ function takeAltarBlessing() {
         if (m.bossT <= 0) {
           m.bossT = cd1 * 0.5;
           try {
-            const pool = (m.abilities || []).filter(a => { try { const k = (window.CFG.ABILITIES[a] || {}).kind; return k === "projectile" || k === "aoe" || k === "cataclysm" || k === "technique" || k === "buff"; } catch (e2) { return false; } });
+            const pool = (m.abilities || []).filter(a => { try { const k = (window.CFG.ABILITIES[a] || {}).kind; return k === "projectile" || k === "aoe" || k === "cataclysm" || k === "technique" || k === "shallow" || k === "buff"; } catch (e2) { return false; } });
             let cast = false;
             for (let t = 0; t < 6 && pool.length && !cast; t++) {
               m._pkIdx = ((m._pkIdx | 0) + 1 + ((Math.random() * pool.length) | 0)) % pool.length;
@@ -18780,7 +19539,7 @@ function takeAltarBlessing() {
     // stamina: sprinting drains, everything else regens after a short delay
     try { ensureStamina(p); } catch (e) { }
     let wantSprint = false;
-    // Sprint latch (hysteresis): starting costs 12 stamina, stopping only at
+    // Sprint latch (hysteresis): starting costs 6 stamina, stopping only at
     // 0. Without this, holding shift at ~1 stamina toggled 1.5x/1x every few
     // frames — the hero visibly lurched and the camera + night light whipped
     // with it, which reads as screen flicker while sprinting.
@@ -18788,12 +19547,12 @@ function takeAltarBlessing() {
       const sKey = !!((G.keys && G.keys["shift"]) || (G.joy && G.joy.sprint));
       const st = (p.stamina || 0);
       if (G._sprintLatch) { if (!moving || pRooted || !sKey || st <= 0) G._sprintLatch = false; }
-      else if (moving && !pRooted && sKey && st > 12) G._sprintLatch = true;
+      else if (moving && !pRooted && sKey && st > 6) G._sprintLatch = true;
       wantSprint = !!G._sprintLatch;
     } catch (e) { wantSprint = false; }
     if (wantSprint) {
       try {
-        p.stamina = Math.max(0, (p.stamina || 0) - 12 * dt);
+        p.stamina = Math.max(0, (p.stamina || 0) - 6 * dt);
         p._stamDelay = performance.now() + 600;
       } catch (e) { }
     } else {
@@ -18881,7 +19640,7 @@ function takeAltarBlessing() {
           const s0 = p.hotbar && p.hotbar[di];
           if (s0 && s0.kind === "ability" && (p.abilities || []).includes(s0.id)) {
             const ab = (window.CFG && window.CFG.ABILITIES && window.CFG.ABILITIES[s0.id]) || null;
-            if (ab && ab.kind !== "technique") {
+            if (ab && ab.kind !== "technique" && ab.kind !== "shallow") {
               const now = performance.now() / 1000;
               const onCd = !!((p.cooldowns && p.cooldowns[s0.id] > now) || p.techFocus || p.waveRide);
               let cost = 0;
@@ -18903,8 +19662,8 @@ function takeAltarBlessing() {
         // (dagger 0.14 > sword 0.18 > axe 0.22 > hammer 0.26; bows flurry
         // like same-tier hammers), better tiers flurry faster
         // (−0.02s per tierMult over 1), and Agility quickens every swing
-        // (+0.25% weapon speed per point, floored at 0.08s overall). Every
-        // swing still costs stamina, so faster bursts burn out faster.
+        // (+0.25% weapon speed per point, floored at 0.08s overall). Flurry
+        // swings cost a little stamina, so faster bursts burn out faster.
         const flurry = wantSprint && (p.stamina || 0) > 0;
         const flurryCd = flurryCadence(p);
         // normal swings ride the weapon too: lighter families cycle faster,
@@ -19699,7 +20458,7 @@ function takeAltarBlessing() {
           if (isBossEnt(m) && td > 3.5 && (m.stamina || 0) > 1 && !(performance.now() < (m.slowUntil || 0))) {
             ensureStamina(m);
             if ((m.stamina || 0) > 1) {
-              m.stamina = Math.max(0, (m.stamina || 0) - 12 * dt);
+              m.stamina = Math.max(0, (m.stamina || 0) - 6 * dt);
               m._stamDelay = performance.now() + 600;
               bSprint = true;
             }
@@ -19942,8 +20701,8 @@ function takeAltarBlessing() {
                   if (isBossEnt(m) && tgt.hp > 0) {
                     const t2 = (typeof bossTierOf === "function" ? bossTierOf(m) : 1) || 1;
                     const fch = Math.min(0.3, 0.10 + 0.02 * t2 + (m.bossEnraged ? 0.05 : 0));
-                    if (Math.random() < fch && hasStamina(m, 7)) {
-                      spendStamina(m, 7);
+                    if (Math.random() < fch && hasStamina(m, 3)) {
+                      spendStamina(m, 3);
                       dealDamage(m, tgt, Math.max(1, Math.round(combatDmg(m, "strike", tgt) * 0.6)), { color: "#ffd93d", move: "strike" });
                       try { addDmgNum(m.x, m.y - 0.8, "⚔️ flurry!", "#ffd93d"); } catch (e3) { }
                     }
@@ -21081,6 +21840,13 @@ function takeAltarBlessing() {
                 ents.push({ y: q.y, kind: "npc", o: q });
               }
             } catch (e) {}
+            try {
+              for (const v of (r.tames || [])) {
+                if (!v || v.x == null || v.y == null) continue;
+                if (v.x < gx0 - 2 || v.x > gx1 + 2 || v.y < gy0 - 2 || v.y > gy1 + 2) continue;
+                ents.push({ y: v.y, kind: "tame", o: v });
+              }
+            } catch (e) {}
           }
         } else if (inD && G.player.inDungeon && G.dungeon) {
           let myDid2 = null;
@@ -21098,6 +21864,13 @@ function takeAltarBlessing() {
                 if (!q || q.x == null || q.y == null) continue;
                 if (q.x < gx0 - 2 || q.x > gx1 + 2 || q.y < gy0 - 2 || q.y > gy1 + 2) continue;
                 ents.push({ y: q.y, kind: "npc", o: q });
+              }
+            } catch (e) {}
+            try {
+              for (const v of (r.tames || [])) {
+                if (!v || v.x == null || v.y == null) continue;
+                if (v.x < gx0 - 2 || v.x > gx1 + 2 || v.y < gy0 - 2 || v.y > gy1 + 2) continue;
+                ents.push({ y: v.y, kind: "tame", o: v });
               }
             } catch (e) {}
           }
@@ -22357,8 +23130,9 @@ function takeAltarBlessing() {
       }
     } else if (kind === 'tame') {
       var mfg2 = dead ? '#bbbbbb' : '#ffe9a8';
-      var mborder2 = dead ? '#888888' : '#ffd93d';
-      tagTop = drawNameTag(ctx, sx, tagY, '\uD83D\uDC9B ', tagName(o, tagKindName(o)), tagLv(o), 'bold 12px sans-serif', 'bold 11px sans-serif', mfg2, dead ? '#999999' : '#ffd93d', mborder2);
+      var mborder2 = dead ? '#888888' : (o.isRemoteTame ? '#5dd68a' : '#ffd93d');
+      var tpre = (!dead && o.isRemoteTame) ? '\u25cf ' : '';
+      tagTop = drawNameTag(ctx, sx, tagY, tpre + '\uD83D\uDC9B ', tagName(o, tagKindName(o)), tagLv(o), 'bold 12px sans-serif', 'bold 11px sans-serif', mfg2, dead ? '#999999' : '#ffd93d', mborder2);
     } else if (kind === 'mob') {
       var hostileNow = !dead && o.targetId && o.hostileUntil && performance.now() < o.hostileUntil;
       var mfg = dead ? '#bbbbbb' : hostileNow ? '#ffb3b3' : '#ffffff';

@@ -20,10 +20,10 @@ window.HeavenMobs = (() => {
   ];
   // Bosses: passive overworld bosses. Peter-tier stats handled in mock battle separately.
   const B = [
-    ["divine_dragon", "Divine Dragon", 5800, 400, 70, 5, 3.4, 1700, ["whiteout", "heal", "panacea", "smite"], "winged", "#ffe9a0", 10, ["dawn"], ["nova", "beam"], "🌅 Bask, little one."],
-    ["celestial_messenger", "Celestial Messenger", 5600, 420, 64, 4, 4.4, 1550, ["smite", "dazzle", "heal", "angel_of_life"], "winged", "#fffdf6", 10, ["dawn"], ["beam", "charm"], "📯 The dawn sends regards."],
-    ["reservoir_leviathan", "Reservoir Leviathan", 7050, 300, 68, 5, 3.0, 1600, ["tideburst", "heal", "panacea"], "serpent", "#7ac8ff", 11, ["dawn"], ["tide", "nova"], "🌊 Drink deep, and be calm."],
-    ["seraph_regent", "Seraph Regent", 6650, 380, 66, 4, 3.8, 1580, ["smite", "whiteout", "heal", "panacea"], "humanoid", "#f6d34e", 11, ["dawn"], ["beam", "white"], "👑 Kneel — gently."],
+    ["divine_dragon", "Divine Dragon", 5800, 400, 210, 5, 3.4, 1700, ["whiteout", "heal", "panacea", "smite"], "winged", "#ffe9a0", 10, ["dawn"], ["nova", "beam"], "🌅 Bask, little one."],
+    ["celestial_messenger", "Celestial Messenger", 5600, 420, 192, 4, 4.4, 1550, ["smite", "dazzle", "heal", "angel_of_life"], "winged", "#fffdf6", 10, ["dawn"], ["beam", "charm"], "📯 The dawn sends regards."],
+    ["reservoir_leviathan", "Reservoir Leviathan", 7050, 300, 204, 5, 3.0, 1600, ["tideburst", "heal", "panacea"], "serpent", "#7ac8ff", 11, ["dawn"], ["tide", "nova"], "🌊 Drink deep, and be calm."],
+    ["seraph_regent", "Seraph Regent", 6650, 380, 198, 4, 3.8, 1580, ["smite", "whiteout", "heal", "panacea"], "humanoid", "#f6d34e", 11, ["dawn"], ["beam", "white"], "👑 Kneel — gently."],
   ];
   const ROLE_ANGEL = {
     angel_guard: "seraph_guard", civilized_angel: "dawn_angel",

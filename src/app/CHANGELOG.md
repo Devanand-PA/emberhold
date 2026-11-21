@@ -6,7 +6,39 @@
   The popup appears once per version for each player (tracked in their
   browser), plus a 📜 Changelog button in Help and the pause menu.
 -->
-<!-- changelog-version: 287 -->
+<!-- changelog-version: 294 -->
+
+## v294 -- ATK/MATK and DEF/SDEF are independent stats
+
+- **🔓 Spell stats stand on their own**: every mob and boss template now carries independent `matk` (spell power) and `sdef` (spell defence) bases instead of deriving them from `atk`/`def` — tune a bruiser's claws without touching its hexes, or a warlord's ward without touching its plate. Defaults preserve the old behavior exactly (`matk` = `atk`; bosses without `sdef` keep the bulwark derivation off DEF), and every one of the 70+ `bosses.yaml` rows now bakes its own `matk` so warlord arsenals tune per boss. Set an explicit `sdef:` on any boss to take manual control (bulwark yields for that boss). Tames, the codex and the practice summoner all read the same stats.
+
+## v293 -- Warlords hit three times harder
+
+- **👑 Every warlord's raw ATK tripled**: all 70+ boss templates (surface lords, hell court, heaven serenes, Peter, the goddess and the Threshold Devourer) now carry 3x raw ATK — and since spell power derives from the same stat, MATK tripled too. No new multipliers, no defense changes: strikes, arrows and spells all scale up honestly through the existing formulas. Bosses above your level should feel genuinely dangerous now.
+
+## v292 -- Tamed wild-mob arrows, honest death screen
+
+- **🏹 Wild-mob arrows land at melee scale**: archer-kind mobs (and any mob that draws a bow) used the shared hero bow formula, which multiplies bow ATK, arrow power squared and bow power together — a lv46 archer's arrow hit ~1900 through 195 DEF while a lv50 bruiser's strike bounced off for 1, so damage felt like chip or one-shot with nothing between. Wild-mob arrows now hit at melee scale (ATK x1.1, like the old mobarrow volley, still mitigated once by DEF) — archers stay scary at range without deleting heroes, and your DEF counts against them. Hero, party, tame and NPC archery is untouched.
+- **🪦 Death screen names arrows**: every non-spell blow used to read as "strike", so that 1580 bowshot looked like a claw swipe. Last blows now read `arrow`, `strike` or `<element> spell` from the real vehicle (routed multiplayer deaths audit the same way).
+
+## v291 -- Habitus and kasaya quicken regen
+
+- **🕯️ Habitus breathe back MP, 🥻 kasaya breathe back stamina**: every habitus now adds flat MP regen (+0.2/s novice → +1.5/s dawnchoir) and every kasaya adds flat stamina regen (+0.2/s patched → +1.5/s dawnsilk), stacking with stats and skill-tree ranks. Bench upgrades scale it like every other flat stat, and the sidebar, benches and codex all show the new `MP/s` + `ST/s` lines (the sidebar also finally lists `ST` pools, which previously showed only in descs).
+
+## v290 -- Threshold Devourers stay visible in shared delves
+
+- **🌀 The extra teeth stay teeth**: the Threshold Devourer that wakes beside the delve lord is now flagged like the lying-gate portal mimic (extra teeth, never the lord) — it can no longer suppress the lord's spawn or start its 30s respawn cooldown when it dies.
+- **👁️ Bosses publish instance-wide**: the delve lord and both Threshold Devourer appearances now ride the shared channel regardless of distance (bosses first, past the entry cap), so a mate scouting the throne room while the sim hangs back sees the pair live instead of an empty room. Regulars stay range-gated as before.
+
+## v289 -- Armor and kasaya grant stamina
+
+- **⚡ Armor and kasaya grant stamina**: every armor (light + heavy, plus emberplate, rimeplate and dragonscale) and every kasaya now adds max stamina by tier — the same way robes and habitus add max MP (leather +30 up to dawnstone plate +1080; patched +60 up to dawnsilk +1050). Bench upgrades scale it like every other flat stat, allies' worn gear counts too, and old saves pick it up on equip with nothing to migrate.
+
+## v288 -- Mythril from floor 4, steel from floor 2, shared teeth
+
+- **⛏️ Mythril band moves up to floor 4**: mythril/emerald/frostwood-band gear and mats (blades, plate, shields, emerald + holy-bead foci, holy vestments, shadowweave, sunsilk kasaya, vesper habit, stormcall) now surface from delve floor 4+ instead of 5+ — chests, boss hoards and corpses, never shops or overworld. Holy-bead wands/staves, holy vestments, shadowweave and holy rings join the gated list, so nothing in the band leaks early or onto shelves.
+- **🛡️ Steel starts on floor 2**: the first delve floor now caps at the iron band — steel/silver gear, sapphire wands/staves, archmage robes and their kasaya/habitus kin start dropping, boss-hoarding and corpse-looting from floor 2. Overworld still caps at steel, dragon band still waits for floor 11+.
+- **🦷 Mimics converge in shared delves**: teeth triggered by anyone in the delve now publish to every occupant — the triggerer keeps simulating its own mimic, blows against it route to the owner for the one true outcome, and kill credit still lands on the killer. No more invisible biters (or unkillable ghosts) when someone else wakes the chest or the lying gate.
 
 ## v287 -- Hell grows strange, heaven grows wide
 

@@ -135,8 +135,13 @@ window.BossData = (() => {
       if (b.name != null) T.name = String(b.name);
       if (b.hp != null) T.hp = num(b.hp, T.hp);
       if (b.mp != null) T.mp = num(b.mp, T.mp);
-      if (b.atk != null) T.atk = num(b.atk, T.atk);
+     if (b.atk != null) T.atk = num(b.atk, T.atk);
+      // independent spell stats: present rows set their own base, absent rows
+      // delete so the atk/def fallbacks below govern (the file stays the whole
+      // truth — no stale value can linger from a fallback or an old edit)
+      if (b.matk != null) T.matk = num(b.matk, T.matk); else delete T.matk;
       if (b.def != null) T.def = num(b.def, T.def);
+      if (b.sdef != null) T.sdef = num(b.sdef, T.sdef); else delete T.sdef;
       if (b.spd != null) T.spd = num(b.spd, T.spd);
       if (b.xp != null) T.xp = num(b.xp, T.xp);
       if (Array.isArray(b.abilities)) T.abilities = b.abilities.slice();

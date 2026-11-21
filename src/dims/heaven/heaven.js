@@ -219,14 +219,14 @@ window.Heaven = (() => {
       if (!C || !C.MOB_TEMPLATES) return;
       if (!C.MOB_TEMPLATES.goddess) {
         C.MOB_TEMPLATES.goddess = {
-          name: "Goddess of Dawn", hp: 8225, mp: 850, atk: 110, def: 4, spd: 4.8,
+          name: "Goddess of Dawn", hp: 8225, mp: 850, atk: 330, def: 4, spd: 4.8,
           xp: 8000, abilities: ["holy_sword", "smite", "blessed_weapon", "heal", "panacea", "whiteout"],
           tint: "#ffe9a8", body: "humanoid", boss: true, heavenBoss: true,
         };
       } else {
         try {
           const t = C.MOB_TEMPLATES.goddess;
-          t.hp = 8225; t.mp = 850; t.atk = 110; t.def = 4; t.spd = 4.8;
+          t.hp = 8225; t.mp = 850; t.atk = 330; t.def = 4; t.spd = 4.8;
           t.xp = 8000;
           if (!Array.isArray(t.abilities)) t.abilities = [];
           for (const a of ["holy_sword", "smite", "blessed_weapon", "heal", "panacea", "whiteout"]) if (!t.abilities.includes(a)) t.abilities.push(a);

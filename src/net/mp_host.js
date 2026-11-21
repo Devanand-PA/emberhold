@@ -687,6 +687,10 @@ self.onmessage = function (ctx) {
          face: isFinite(Number(se.face)) ? Math.round(Number(se.face) * 100) / 100 : undefined,
          looted: se.looted ? true : undefined,
           sub: se.sub ? true : undefined, voidH: se.voidH ? true : undefined,
+          // quest-contract tags ride along so shadows credit + loot correctly
+          qg: mpCleanStr(se.qg, 48) || undefined,
+          qk: mpCleanStr(se.qk, 24) || undefined,
+          qf: mpCleanStr(se.qf, 40) || undefined,
        });
       }
       var sdt = Number(m.dayTime);
@@ -750,6 +754,10 @@ self.onmessage = function (ctx) {
          face: isFinite(Number(pe.face)) ? Math.round(Number(pe.face) * 100) / 100 : undefined,
          looted: pe.looted ? true : undefined,
           sub: pe.sub ? true : undefined, voidH: pe.voidH ? true : undefined,
+          // quest-contract tags ride the fast channel too (see sendSnapPos)
+          qg: mpCleanStr(pe.qg, 48) || undefined,
+          qk: mpCleanStr(pe.qk, 24) || undefined,
+          qf: mpCleanStr(pe.qf, 40) || undefined,
        });
      }
      mpTouch(ch, hash, null, now);
@@ -789,6 +797,10 @@ self.onmessage = function (ctx) {
           face: isFinite(Number(e.face)) ? Math.round(Number(e.face) * 100) / 100 : undefined,
           looted: e.looted ? true : undefined,
            sub: e.sub ? true : undefined, voidH: e.voidH ? true : undefined,
+          // quest-contract tags (fallback publisher path — see sendSnap)
+          qg: mpCleanStr(e.qg, 48) || undefined,
+          qk: mpCleanStr(e.qk, 24) || undefined,
+          qf: mpCleanStr(e.qf, 40) || undefined,
         });
        }
        mpTouch(ch, hash, null, now);
@@ -901,7 +913,7 @@ self.onmessage = function (ctx) {
       if (!mpRate(rateHit, ctx.conn.id, 100, 10000)) return;
       if (!ch.members[hash]) return;
       if (!mpValidEntId(m.id)) return;
-      var amtI = Math.max(1, Math.min(9999, Math.round(Number(m.amount) || 0)));
+      var amtI = Math.max(1, Math.min(999999, Math.round(Number(m.amount) || 0)));
       if (!(amtI > 0)) return;
       var didI = mpCleanStr(m.did, 48);
       var stI = null;
@@ -959,6 +971,11 @@ self.onmessage = function (ctx) {
           xp: xpK, aid: mpValidEntId(m.aid) ? String(m.aid).slice(0, 48) : null,
           el: mpCleanStr(m.el, 16) || "physical", fam: mpCleanStr(m.fam, 16) || "unarmed",
           move: mpCleanStr(m.move, 32),
+          // quest-credit context for the killer's contract progress
+          qk: mpCleanStr(m.qk, 24) || null,
+          qg: mpCleanStr(m.qg, 48) || null,
+          dx: isFinite(Number(m.dx)) ? Math.max(-2000, Math.min(2000, Math.round(Number(m.dx) * 100) / 100)) : null,
+          dy: isFinite(Number(m.dy)) ? Math.max(-2000, Math.min(2000, Math.round(Number(m.dy) * 100) / 100)) : null,
         }));
       } catch (e2) {}
       return;
@@ -1001,7 +1018,7 @@ self.onmessage = function (ctx) {
       if (String(ch.host || "").toLowerCase() !== hash) return;
       var toH = mpCleanStr(m.to, 64).toLowerCase();
       if (!mpValidHash(toH) || !ch.members[toH]) return;
-      var amtH = Math.max(1, Math.min(9999, Math.round(Number(m.amount) || 0)));
+      var amtH = Math.max(1, Math.min(999999, Math.round(Number(m.amount) || 0)));
       if (!(amtH > 0)) return;
       var stH = null;
       try {
@@ -1034,7 +1051,7 @@ self.onmessage = function (ctx) {
       if (!ch.members[hash]) return;
       var toP = mpCleanStr(m.to, 64).toLowerCase();
       if (!mpValidHash(toP) || !ch.members[toP]) return;
-      var amtP = Math.max(1, Math.min(9999, Math.round(Number(m.amount) || 0)));
+      var amtP = Math.max(1, Math.min(999999, Math.round(Number(m.amount) || 0)));
       if (!(amtP > 0)) return;
       var stP = null;
       try {
@@ -1067,7 +1084,7 @@ self.onmessage = function (ctx) {
       if (!mpRate(rateAct, ctx.conn.id, 100, 10000)) return;
       if (!ch.members[hash]) return;
       var kind = String(m.kind || "");
-      if (kind !== "melee" && kind !== "proj" && kind !== "cast" && kind !== "blast") return;
+      if (kind !== "melee" && kind !== "proj" && kind !== "cast" && kind !== "blast" && kind !== "angel" && kind !== "hazard" && kind !== "orb" && kind !== "wave" && kind !== "cata") return;
       var ax2 = Number(m.x), ay2 = Number(m.y);
       if (!isFinite(ax2) || !isFinite(ay2)) return;
       if (ax2 < -2000) ax2 = -2000; if (ax2 > 2000) ax2 = 2000;
@@ -1115,6 +1132,40 @@ self.onmessage = function (ctx) {
         out.abId = mpCleanStr(m.abId, 24);
         out.color = mpCleanStr(m.color, 16) || "#ffffff";
         out.snd = (m.snd === "heal") ? "heal" : "fire";
+      } else if (kind === "hazard") {
+        out.abId = mpCleanStr(m.abId, 24);
+        out.color = mpCleanStr(m.color, 16) || "#ffffff";
+        if (isFinite(Number(m.r))) out.r = Math.max(0.3, Math.min(8, Number(m.r)));
+        if (isFinite(Number(m.life))) out.life = Math.max(0.5, Math.min(9, Number(m.life)));
+        if (isFinite(Number(m.pulseR))) out.pulseR = Math.max(0.5, Math.min(8, Number(m.pulseR)));
+        if (isFinite(Number(m.ang))) out.ang = Number(m.ang);
+        if (isFinite(Number(m.seed))) out.seed = Number(m.seed);
+        if (m.follow) out.follow = true;
+      } else if (kind === "orb") {
+        out.abId = mpCleanStr(m.abId, 24);
+        out.color = mpCleanStr(m.color, 16) || "#ffffff";
+        out.mode = (m.mode === "orbit") ? "orbit" : "homing";
+        if (isFinite(Number(m.vx))) out.vx = Math.max(-30, Math.min(30, Number(m.vx)));
+        if (isFinite(Number(m.vy))) out.vy = Math.max(-30, Math.min(30, Number(m.vy)));
+        if (isFinite(Number(m.life))) out.life = Math.max(0.5, Math.min(9, Number(m.life)));
+        if (isFinite(Number(m.ang))) out.ang = Number(m.ang);
+        if (isFinite(Number(m.angSpd))) out.angSpd = Math.max(0.5, Math.min(8, Number(m.angSpd)));
+        if (isFinite(Number(m.radius))) out.radius = Math.max(0.5, Math.min(5, Number(m.radius)));
+        if (isFinite(Number(m.ox))) out.ox = Number(m.ox);
+        if (isFinite(Number(m.oy))) out.oy = Number(m.oy);
+        if (Array.isArray(m.trail)) {
+          var otr = [];
+          for (var oti = 0; oti < m.trail.length && otr.length < 4; oti++) { var otc = mpCleanStr(m.trail[oti], 16); if (otc) otr.push(otc); }
+          if (otr.length) out.trail = otr;
+        }
+      } else if (kind === "wave") {
+        if (isFinite(Number(m.ang))) out.ang = Number(m.ang);
+        if (isFinite(Number(m.r))) out.r = Math.max(0.5, Math.min(4, Number(m.r)));
+      } else if (kind === "cata") {
+        out.abId = mpCleanStr(m.abId, 24);
+        out.color = mpCleanStr(m.color, 16) || "#ffffff";
+        if (isFinite(Number(m.face))) out.face = Number(m.face);
+        if (isFinite(Number(m.r))) out.r = Math.max(0.5, Math.min(14, Number(m.r)));
       }
       try { connMeta.set(ctx.conn.id, { channelId: id, hash: hash }); } catch (e) {}
       try { ctx.conn.subscribe(mpTopic(id)); } catch (e) {}
@@ -1215,7 +1266,7 @@ self.onmessage = function (ctx) {
       if (!mpValidHash(toDH) || !ch.members[toDH]) return;
       var didDH = mpCleanStr(m.did, 48);
       if (!didDH) return;
-      var amtDH = Math.max(1, Math.min(9999, Math.round(Number(m.amount) || 0)));
+      var amtDH = Math.max(1, Math.min(999999, Math.round(Number(m.amount) || 0)));
       if (!(amtDH > 0)) return;
       var stDH = null;
       try {
@@ -1357,13 +1408,116 @@ self.onmessage = function (ctx) {
      }
      return;
    }
-   // ---- guild board + commissions: exclusive pins and shared player
-   // postings. Validated + relayed, never stored. Receivers apply them to
-   // their own hero-local guild state; first turn-in wins by done race. ----
-    if (m.t === "guildClaim" || m.t === "guildCommNew" || m.t === "guildCommDone" || m.t === "guildCommAccept" || m.t === "guildCommSync") {
+   // ---- ally quest sharing: directed offers, routed, never stored. The
+   // receiver validates the ally bond and builds their own copy on accept. ----
+   if (m.t === "questShare" || m.t === "questShareDecline" || m.t === "questShareTaken") {
+     if (!mpRate(rateChat, ctx.conn.id, 10, 10000)) return;
+     if (!ch.members[hash]) return;
+     var qsTo = mpCleanStr(m.to, 64).toLowerCase();
+     if (!mpValidHash(qsTo) || !ch.members[qsTo]) return;
+     var qsId = mpCleanStr(m.shareId, 16);
+     if (!qsId) return;
+     try { ctx.conn.subscribe(mpTopic(id)); } catch (e2) {}
+     if (m.t === "questShare") {
+       var qq = (m.q && typeof m.q === "object") ? m.q : null;
+       if (!qq) return;
+       var qsys = qq.sys === "g" ? "g" : (qq.sys === "v" ? "v" : null);
+       if (!qsys) return;
+       var qf = { sys: qsys };
+       if (qsys === "v") {
+         var qvt = String(qq.type || "");
+         if (qvt !== "slay" && qvt !== "fetch" && qvt !== "clear") return;
+         qf.type = qvt;
+         var qvn = Math.max(1, Math.min(qvt === "slay" ? 10 : 6, Math.round(Number(qq.need) || 0) || 0));
+         if (!(qvn > 0)) return;
+         qf.need = qvn;
+         if (qvt === "slay") { var qvm = mpCleanStr(qq.mobKind, 24); if (!qvm) return; qf.mobKind = qvm; }
+         else if (qvt === "fetch") { var qvi = mpCleanStr(qq.itemId, 40); if (!qvi) return; qf.itemId = qvi; }
+         qf.diff = Math.max(1, Math.min(5, Math.round(Number(qq.diff) || 1)));
+       } else {
+         var qgk = String(qq.kind || "");
+         if (qgk !== "kill" && qgk !== "clear" && qgk !== "fetch") return;
+         qf.kind = qgk;
+         var qgn = Math.max(1, Math.min(9, Math.round(Number(qq.need) || 0) || 0));
+         if (!(qgn > 0)) return;
+         qf.need = qgn;
+         if (qgk === "kill" || qgk === "clear") { var qgm = mpCleanStr(qq.mobKind, 24); if (!qgm) return; qf.mobKind = qgm; }
+         else {
+           var qgi = mpCleanStr(qq.itemId, 40); if (!qgi) return; qf.itemId = qgi;
+           var qgf = mpCleanStr(qq.fetchMob, 24); if (qgf) qf.fetchMob = qgf;
+         }
+         if (qq.srcHint != null) qf.srcHint = mpCleanStr(qq.srcHint, 140) || undefined;
+       }
+       qf.title = mpCleanStr(qq.title, 48) || "A shared quest";
+       if (qq.desc != null) qf.desc = mpCleanStr(qq.desc, 220) || undefined;
+       if (qq.story != null) qf.story = mpCleanStr(qq.story, 500) || undefined;
+       if (qq.place != null) qf.place = mpCleanStr(qq.place, 48) || undefined;
+       var qt = (qq.t && typeof qq.t === "object") ? qq.t : null;
+       if (!qt) return;
+       var qgx = Number(qt.gx), qgy = Number(qt.gy);
+       if (!isFinite(qgx) || !isFinite(qgy) || Math.abs(qgx) > 2000 || Math.abs(qgy) > 2000) return;
+       var qtt = { gx: qgx, gy: qgy };
+       if (isFinite(Number(qt.cx)) && Math.abs(Number(qt.cx)) <= 200) qtt.cx = Math.round(Number(qt.cx));
+       if (isFinite(Number(qt.cy)) && Math.abs(Number(qt.cy)) <= 200) qtt.cy = Math.round(Number(qt.cy));
+       if (isFinite(Number(qt.r))) qtt.r = Math.max(4, Math.min(80, Number(qt.r)));
+       if (qt.placeName != null) qtt.placeName = mpCleanStr(qt.placeName, 48) || undefined;
+       if (qt.name != null) qtt.name = mpCleanStr(qt.name, 48) || undefined;
+       if (qt.dungeonId != null) qtt.dungeonId = mpCleanStr(qt.dungeonId, 48) || undefined;
+       if (qt.houseTitle != null) qtt.houseTitle = mpCleanStr(qt.houseTitle, 48) || undefined;
+       if (qt.biome != null) qtt.biome = mpCleanStr(qt.biome, 24) || undefined;
+       qf.t = qtt;
+       if (qq.giver && typeof qq.giver === "object") {
+         qf.giver = { name: mpCleanStr(qq.giver.name, 40) || undefined, placeName: mpCleanStr(qq.giver.placeName, 48) || undefined };
+       }
+       try { pubsub.publish(mpTopic(id), JSON.stringify({ t: "questShare", from: hash, to: qsTo, shareId: qsId, q: qf })); } catch (e2) {}
+     } else if (m.t === "questShareTaken") {
+       var qsTitle = mpCleanStr(m.title, 48);
+       try { pubsub.publish(mpTopic(id), JSON.stringify({ t: "questShareTaken", from: hash, to: qsTo, shareId: qsId, title: qsTitle || undefined })); } catch (e2) {}
+     } else {
+       try { pubsub.publish(mpTopic(id), JSON.stringify({ t: "questShareDecline", from: hash, to: qsTo, shareId: qsId })); } catch (e2) {}
+     }
+     return;
+   }
+   // ---- guild board + commissions + contract restock: exclusive pins,
+   // shared postings, and per-player shortfalls the sim stocks. Validated +
+   // relayed, never stored. Receivers apply them to their own hero-local
+   // guild state; first turn-in wins by done race. ----
+    if (m.t === "guildClaim" || m.t === "guildCommNew" || m.t === "guildCommDone" || m.t === "guildCommAccept" || m.t === "guildCommSync" || m.t === "guildQuestNeed") {
       if (!mpRate(rateChat, ctx.conn.id, 10, 10000)) return;
       if (!ch.members[hash]) return;
       try { ctx.conn.subscribe(mpTopic(id)); } catch (e2) {}
+      if (m.t === "guildQuestNeed") {
+        // contract shortfalls: small bounded arrays, validated + relayed so
+        // the simulator can stock every requester's grounds. Never stored.
+        var qNeeds = [];
+        try {
+          if (Array.isArray(m.needs)) for (var qi = 0; qi < m.needs.length && qNeeds.length < 4; qi++) {
+            var qw = m.needs[qi];
+            if (!qw || typeof qw !== "object") continue;
+            var qk = (qw.kind === "clear" || qw.kind === "fetch") ? qw.kind : "kill";
+            var qmk = mpCleanStr(qw.mobKind, 24);
+            if (!qmk) continue;
+            var qneed = Math.max(1, Math.min(9, Math.round(Number(qw.need) || 0)));
+            if (!(qneed > 0)) continue;
+            var qgx = Number(qw.gx), qgy = Number(qw.gy);
+            if (!isFinite(qgx) || !isFinite(qgy) || Math.abs(qgx) > 2000 || Math.abs(qgy) > 2000) continue;
+            var qpx = Number(qw.px), qpy = Number(qw.py);
+            if (!isFinite(qpx) || !isFinite(qpy) || Math.abs(qpx) > 2000 || Math.abs(qpy) > 2000) continue;
+            qNeeds.push({
+              kind: qk, mobKind: qmk, need: qneed,
+              gx: Math.round(qgx * 100) / 100, gy: Math.round(qgy * 100) / 100,
+              r: Math.max(4, Math.min(80, Number(qw.r) || 70)),
+              px: Math.round(qpx * 100) / 100, py: Math.round(qpy * 100) / 100,
+              dim: (qw.dim === "hell" || qw.dim === "heaven") ? qw.dim : "surf",
+              gid: mpCleanStr(qw.gid, 48) || undefined,
+              itemId: (qk === "fetch") ? (mpCleanStr(qw.itemId, 40) || undefined) : undefined,
+            });
+          }
+        } catch (eQ) {}
+        if (!qNeeds.length) return;
+        try { pubsub.publish(mpTopic(id), JSON.stringify({ t: "guildQuestNeed", from: hash, needs: qNeeds })); } catch (e2) {}
+        return;
+      }
       var gOut = null;
       if (m.t === "guildClaim") {
         var gUid = mpCleanStr(m.uid, 128);
@@ -1482,9 +1636,35 @@ self.onmessage = function (ctx) {
         if (!fwdParty.length) fwdParty = null;
       }
     } catch (e2) { fwdParty = null; }
+    // fellow travelers' beasts (wild-tamed, bought, lent): validated + capped
+    // like the party roster so relay-only peers see every beast too.
+    var fwdTames = null;
+    try {
+      if (Array.isArray(m.tm)) {
+        fwdTames = [];
+        for (var ti2 = 0; ti2 < m.tm.length && fwdTames.length < 8; ti2++) {
+          var te2 = m.tm[ti2];
+          if (!te2) continue;
+          var tx = Number(te2.x), ty = Number(te2.y);
+          var tq = {
+            k: mpCleanStr(te2.k, 24) || "beast",
+            n: mpCleanStr(te2.n, 24) || "Beast",
+            lv: Math.max(1, Math.min(125, te2.lv | 0 || 1)),
+            hp: Math.max(0, Math.min(999999, Math.round(Number(te2.hp) || 0))),
+            maxHp: Math.max(1, Math.min(999999, Math.round(Number(te2.maxHp) || 0) || 40))
+          };
+          if (isFinite(tx) && isFinite(ty)) { tq.x = Math.round(Math.max(-2000, Math.min(2000, tx)) * 100) / 100; tq.y = Math.round(Math.max(-2000, Math.min(2000, ty)) * 100) / 100; }
+          var tt2 = mpCleanStr(te2.tint, 16); if (tt2) tq.tint = tt2;
+          if (te2.boss) tq.boss = true;
+          if (te2.rider != null && isFinite(Number(te2.rider))) { var _ri2 = Number(te2.rider) | 0; if (_ri2 >= 0 && _ri2 < 12) tq.rider = _ri2; }
+          fwdTames.push(tq);
+        }
+        if (!fwdTames.length) fwdTames = null;
+      }
+    } catch (e2) { fwdTames = null; }
       try {
         pubsub.publish(mpTopic(id), JSON.stringify({
-          t: "pos", hash: hash, name: mm.name, x: ox, y: oy, party: fwdParty || undefined,
+          t: "pos", hash: hash, name: mm.name, x: ox, y: oy, party: fwdParty || undefined, tm: fwdTames || undefined,
           // dead-reckoning fields (new clients send, old omit — receivers accept both)
           sq: (isFinite(Number(m.sq)) && Number(m.sq) > 0) ? Math.floor(Number(m.sq)) : undefined,
           st: isFinite(Number(m.st)) ? Math.max(0, Math.min(4100000000000, Math.round(Number(m.st)))) : undefined,
@@ -1509,6 +1689,12 @@ self.onmessage = function (ctx) {
         // look: custom face/outfit + equipped ids (old clients omit, read default)
         app: mpCleanApp(m.app),
         w: mpCleanStr(m.w, 32) || undefined, a: mpCleanStr(m.a, 32) || undefined,
+        // shield + offhand rode pos but never the relay: relay-only peers
+        // kept a stale shield forever after an unequip ("-" clears it)
+        s: mpCleanStr(m.s, 32) || undefined, o: mpCleanStr(m.o, 32) || undefined,
+        // flat combat-voice stats for the Lucky Chorus (old senders omit)
+        luk: (isFinite(Number(m.luk)) ? Math.max(0, Math.min(999, Number(m.luk) | 0)) : undefined),
+        cha: (isFinite(Number(m.cha)) ? Math.max(0, Math.min(999, Number(m.cha) | 0)) : undefined),
         // planted torches + player-built overlays ride pos P2P already; the
         // relay must forward them too or relay-only peers never see a
         // neighbor's lights, walls, stalls, portals or furniture. Validated
@@ -1847,7 +2033,7 @@ self.rpc = {
       var id = mpCleanStr(arg.channelId, 16).toUpperCase();
       var from = mpCleanStr(arg.fromHash, 64).toLowerCase();
       var to = mpCleanStr(arg.toHash, 64).toLowerCase();
-      var amount = Math.max(1, Math.min(9999, Math.round(Number(arg.amount) || 0)));
+      var amount = Math.max(1, Math.min(999999, Math.round(Number(arg.amount) || 0)));
       if (!mpValidId(id) || !mpValidHash(from) || !mpValidHash(to)) throw new Error("bad request");
       if (!(amount > 0)) throw new Error("bad amount");
       if (!mpRate(rateChat, ctx.conn.id, 10, 10000)) throw new Error("too fast — slow down");

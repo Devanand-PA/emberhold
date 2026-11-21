@@ -362,7 +362,7 @@ window.Trade = (() => {
     }
     // Surface floor-gates: mythril/emerald/frostwood-band and dragon-band
     // goods are NEVER shelved anywhere — they surface only from deep
-    // surface-delve floors (5+ / 11+), not from any merchant.
+    // surface-delve floors (4+ / 11+), not from any merchant.
     try {
       const gated = window.Items && window.Items.SURF_GATED_ALL;
       if (gated && gated.length) stock = stock.filter(s => s && !gated.includes(s.id));
@@ -993,7 +993,7 @@ window.Trade = (() => {
     ensure(npc);
     if (doppelTradeTrip(player, npc)) return { ok: false, msg: `🦷 ${npc.name} was teeth all along!` };
     if (isCataSale(id)) return { ok: false, msg: `🔒 ${itemName(id)} is sealed deep-delve lore — never sold, only found (depth 5+ chests, deep boss hoards).` };
-    if (isGatedSale(id)) return { ok: false, msg: `🔒 ${itemName(id)} is a deep-delve find — never sold. Delve floor 5+ (mythril band) / 11+ (dragon band) or never.` };
+    if (isGatedSale(id)) return { ok: false, msg: `🔒 ${itemName(id)} is a deep-delve find — never sold. Delve floor 4+ (mythril band) / 11+ (dragon band) or never.` };
     n = toCount(n);
     each = Math.max(1, Math.round(Number(each) || 0) || 1);
     const line = (npc.stock || []).find(s => s.id === id);
@@ -1057,7 +1057,7 @@ window.Trade = (() => {
     ensure(npc);
     if (doppelTradeTrip(player, npc)) return { decision: "refuse", msg: `🦷 teeth!` };
     if (isCataSale(id)) return { decision: "refuse", msg: `🔒 ${itemName(id)} is sealed deep-delve lore — never sold, only found (depth 5+ chests, deep boss hoards).` };
-    if (isGatedSale(id)) return { decision: "refuse", msg: `🔒 ${itemName(id)} is a deep-delve find — never sold. Delve floor 5+ (mythril band) / 11+ (dragon band) or never.` };
+    if (isGatedSale(id)) return { decision: "refuse", msg: `🔒 ${itemName(id)} is a deep-delve find — never sold. Delve floor 4+ (mythril band) / 11+ (dragon band) or never.` };
     n = toCount(n); offer = Math.max(1, Math.round(Number(offer) || 0) || 1);
     setFocus(npc, "buy", id, n);
     const line = (npc.stock || []).find(s => s.id === id);

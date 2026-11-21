@@ -416,7 +416,7 @@ window.Icons = (() => {
     try { ab = window.CFG.ABILITIES[id] || null; } catch (e) { }
     if (!ab) { try { ab = (window.CFG.TECHNIQUES || {})[id] ? { kind: "technique", element: "physical", name: id } : null; } catch (e2) { } }
     const kind = (ab && ab.kind) || "projectile", el = (ab && ab.element) || "physical";
-    const tech = kind === "technique";
+    const tech = kind === "technique" || kind === "shallow";
     // frame: spell disc vs art blade-badge
     if (tech) {
       px(g, 4, 4, 16, 16, "#2a2a34"); px(g, 4, 4, 16, 1, "#c9a227"); px(g, 4, 19, 16, 1, "#c9a227");

@@ -819,37 +819,335 @@ window.Entities = (() => {
     recalcDerived(p, false);
     return p;
   }
-  function roleMult(role) {
-    switch (role) {
-      case "warrior": case "guard": return { hp: 1.35, mp: 0.7, atk: 1.25, matk: 0.8, def: 1.3 };
-      case "mage": case "scholar": return { hp: 0.8, mp: 1.6, atk: 1.3, matk: 1.6, def: 0.8 };
-      case "healer": return { hp: 1.0, mp: 1.5, atk: 0.85, matk: 1.5, def: 1.0 };
-      case "rogue": case "hunter": case "ninja": case "thief": return { hp: 0.95, mp: 0.9, atk: 1.1, matk: 0.9, def: 0.9 };
-      default: return { hp: 1, mp: 1, atk: 1, matk: 1, def: 1 };
-    }
+  // ---- celestial townsfolk: angels + civilized demons run hotter ----
+  // High-level by design (angel role floors 40-55, hell-born bulk on top),
+  // and on top of that a role-based celestial frame so they out-stat surf
+  // folk even off-plane. Heavendwellers are ordinary folk living upstairs —
+  // no frame, only their heaven-dim bulk.
+  function isAngelRole(role) {
+    try { return ((window.CFG && window.CFG.ANGEL_ROLES) || []).indexOf(role) >= 0; } catch (e) { return false; }
   }
-  function makeNpcStatBlock(lv, role, dist) {
+  function isCivDemonRole(role) {
+    try { return ((window.CFG && window.CFG.CIV_DEMON_ROLES) || []).indexOf(role) >= 0; } catch (e) { return false; }
+  }
+  function celestialMult(role) {
+    if (isAngelRole(role)) return { hp: 1.45, mp: 1.4, atk: 1.3, matk: 1.3, def: 1.3 };
+    if (isCivDemonRole(role)) return { hp: 1.4, mp: 1.3, atk: 1.25, matk: 1.25, def: 1.25 };
+    return null;
+  }
+  function roleMult(role) {
+    let base;
+    switch (role) {
+      case "warrior": case "guard": return withCelestial(role, { hp: 1.35, mp: 0.7, atk: 1.25, matk: 0.8, def: 1.3 });
+      case "mage": case "scholar": return withCelestial(role, { hp: 0.8, mp: 1.6, atk: 1.3, matk: 1.6, def: 0.8 });
+      case "healer": return withCelestial(role, { hp: 1.0, mp: 1.5, atk: 0.85, matk: 1.5, def: 1.0 });
+      case "rogue": case "hunter": case "ninja": case "thief": return withCelestial(role, { hp: 0.95, mp: 0.9, atk: 1.1, matk: 0.9, def: 0.9 });
+      case "seraph_guard": case "angel_guard": case "hell_guard": base = { hp: 1.35, mp: 0.8, atk: 1.25, matk: 0.9, def: 1.3 }; break;
+      case "dawn_angel": case "scroll_angel": base = { hp: 1.0, mp: 1.5, atk: 1.0, matk: 1.5, def: 1.0 }; break;
+      case "choir_angel": case "angel_priest": case "hell_priest": base = { hp: 1.0, mp: 1.5, atk: 0.85, matk: 1.5, def: 1.0 }; break;
+      case "civilized_succubus": base = { hp: 0.9, mp: 1.4, atk: 1.0, matk: 1.4, def: 0.9 }; break;
+      case "civilized_infernal": case "civilized_doom": base = { hp: 1.3, mp: 0.8, atk: 1.2, matk: 0.9, def: 1.25 }; break;
+      case "civilized_hellbeast": base = { hp: 1.1, mp: 0.8, atk: 1.2, matk: 0.8, def: 1.1 }; break;
+      case "angel_merchant": case "hell_merchant": base = { hp: 1.0, mp: 1.1, atk: 1.0, matk: 1.0, def: 1.0 }; break;
+      case "runesmith": case "tidewarden": base = { hp: 0.9, mp: 1.4, atk: 1.1, matk: 1.4, def: 0.9 }; break;
+      case "priest": case "cleric": case "highpriest": case "mesa_shaman": case "frost_skald": base = { hp: 1.0, mp: 1.5, atk: 0.85, matk: 1.5, def: 1.0 }; break;
+      case "knight": case "samurai": case "marshal": base = { hp: 1.3, mp: 0.8, atk: 1.2, matk: 0.85, def: 1.25 }; break;
+      default: base = { hp: 1, mp: 1, atk: 1, matk: 1, def: 1 };
+    }
+    return withCelestial(role, base);
+  }
+  function withCelestial(role, m) {
+    try {
+      const c = celestialMult(role);
+      if (!c) return m;
+      return { hp: m.hp * c.hp, mp: m.mp * c.mp, atk: m.atk * c.atk, matk: (m.matk != null ? m.matk : m.atk) * c.matk, def: m.def * c.def };
+    } catch (e) { return m; }
+  }
+  // ---- how an NPC fights shapes the body it grows ----
+  // Sword/axe/hammer/spear/dagger/unarmed steel -> ATK + stamina; bows ->
+  // ATK + a little speed; wands/staves + attack magic -> MATK + mana;
+  // plate/shield/shieldwall -> DEF + HP; robes/habitus -> mana + spell power;
+  // light garb -> speed. The mix is read from role + kit + main weapon +
+  // main attire, so a sword-and-plate guard and a robe-and-wand scholar at
+  // the same level end up in very different bodies.
+  function npcWeaponFamOf(itemId) {
+    try {
+      const it = window.Items && window.Items.ITEMS ? window.Items.ITEMS[itemId] : null;
+      if (!it) return null;
+      if (it.bow || it.wtype === "bow") return "bow";
+      if (it.wand || it.staff || it.wtype === "wand" || it.wtype === "staff") return "focus";
+      if (it.wtype) return it.wtype;
+      return null;
+    } catch (e) { return null; }
+  }
+  function npcArmorTrackOf(itemId) {
+    try {
+      if (!itemId) return null;
+      const TR = MOB_ARMOR_TRACKS || {};
+      for (const k of Object.keys(TR)) { if ((TR[k] || []).indexOf(itemId) >= 0) return k; }
+      if (window.Items && window.Items.ROBE_IDS && window.Items.ROBE_IDS[itemId]) return "robe";
+      if (window.Items && window.Items.KASAYA_IDS && window.Items.KASAYA_IDS[itemId]) return "kasaya";
+      return null;
+    } catch (e) { return null; }
+  }
+  function npcStyleFor(role, abilities, weaponId, armorId) {
+    try {
+      let caster = 0.15, physical = 0.3, tanky = 0.15, speedy = 0.1;
+      const R = String(role || "");
+      if (/mage|scholar|runesmith|tidewarden/.test(R)) { caster = 0.8; physical = 0.1; }
+      else if (/healer|priest|cleric|highpriest|shaman|skald/.test(R)) { caster = 0.65; physical = 0.1; tanky = 0.2; }
+      else if (/warrior|guard|knight|samurai|marshal|monarch/.test(R)) { physical = 0.8; tanky = 0.5; caster = 0.05; }
+      else if (/rogue|hunter|ninja|thief|adventurer|rider|nomad/.test(R)) { physical = 0.6; speedy = 0.5; }
+      else if (/angel|seraph|choir|scroll/.test(R)) {
+        if (/guard/.test(R)) { physical = 0.75; tanky = 0.5; caster = 0.25; }
+        else { caster = 0.7; physical = 0.2; tanky = 0.2; }
+      } else if (/infernal|doom|hellbeast|succubus|hell_/.test(R)) {
+        if (/priest/.test(R)) { caster = 0.6; physical = 0.15; }
+        else if (/guard/.test(R)) { physical = 0.75; tanky = 0.45; }
+        else if (/succubus/.test(R)) { caster = 0.65; speedy = 0.25; }
+        else { physical = 0.6; tanky = 0.3; }
+      }
+      const AB = (window.CFG && window.CFG.ABILITIES) || {};
+      let combat = 0, sup = 0, brawl = 0;
+      for (const a of (abilities || [])) {
+        const k = AB[a] && AB[a].kind;
+        if (!k) continue;
+        if (k === "projectile" || k === "aoe" || k === "cataclysm") combat++;
+        else if (k === "heal" || k === "support" || k === "revive" || k === "buff") sup++;
+        else if (a === "whirlwind" || a === "shieldwall" || a === "warcry" || a === "grapple") brawl++;
+        else if (k === "technique" || k === "shallow") brawl++;
+      }
+      caster = Math.min(1, caster + combat * 0.15 + sup * 0.08);
+      physical = Math.min(1, physical + brawl * 0.12 + (combat > 0 && brawl === 0 ? -0.1 : 0));
+      tanky = Math.min(1, tanky + brawl * 0.06);
+      const wf = typeof weaponId === "string" && !((window.Items && window.Items.ITEMS || {})[weaponId]) ? weaponId : npcWeaponFamOf(weaponId);
+      if (wf === "sword" || wf === "axe" || wf === "hammer" || wf === "spear" || wf === "dagger" || wf === "unarmed" || wf === "whip") physical = Math.min(1, physical + 0.3);
+      else if (wf === "bow") { physical = Math.min(1, physical + 0.25); speedy = Math.min(1, speedy + 0.3); }
+      else if (wf === "focus") caster = Math.min(1, caster + 0.35);
+      else if (wf === "shield") tanky = Math.min(1, tanky + 0.3);
+      let tr = typeof armorId === "string" && MOB_ARMOR_TRACKS[armorId] ? armorId : npcArmorTrackOf(armorId);
+      if (tr === "robe") caster = Math.min(1, caster + 0.3);
+      else if (tr === "habitus") { caster = Math.min(1, caster + 0.2); tanky = Math.min(1, tanky + 0.1); }
+      else if (tr === "kasaya") { physical = Math.min(1, physical + 0.2); tanky = Math.min(1, tanky + 0.1); }
+      else if (tr === "light") speedy = Math.min(1, speedy + 0.3);
+      else if (tr === "heavy") { tanky = Math.min(1, tanky + 0.3); physical = Math.min(1, physical + 0.1); }
+      physical = Math.max(0, Math.min(1, physical)); caster = Math.max(0, Math.min(1, caster));
+      tanky = Math.max(0, Math.min(1, tanky)); speedy = Math.max(0, Math.min(1, speedy));
+      return { caster, physical, tanky, speedy };
+    } catch (e) { return { caster: 0.2, physical: 0.4, tanky: 0.2, speedy: 0.15 }; }
+  }
+  function makeNpcStatBlock(lv, role, dist, opts) {
     const m = roleMult(role);
     // Role shapes the body AND level grows it: frontier folk are tougher than
     // villagers (same accelerating curve family as mobs, gentler rates, caps
     // binding at 100). Level 1 is exactly the old body, so early towns and
     // old saves backfill identically — higher levels climb from there.
+    // Fight style bends the RATES (see npcStyleFor): steel leans ATK+stamina,
+    // spells lean MATK+mana, plate leans DEF+HP, light garb leans speed. The
+    // style reads role + kit + main weapon + main attire, so two lv-60 NPCs
+    // in different gear end up in different bodies.
     lv = Math.max(1, Math.round(lv || 1));
+    let style = null;
+    try {
+      const o = opts || {};
+      const abs = o.abilities || ((window.CFG && window.CFG.ROLE_KIT && window.CFG.ROLE_KIT[role]) || []);
+      style = npcStyleFor(role, abs, o.weapon || o.weaponFam || null, o.armor || o.armorTrack || null);
+    } catch (e2) { style = null; }
+    if (!style) style = { caster: 0.2, physical: 0.4, tanky: 0.2, speedy: 0.15 };
     const lf = mobLevelFactor(lv);
     const L100 = mobLevelFactor(100);
     const g2 = (r) => Math.min(1 + r * L100, 1 + r * lf);
     const s = baseStats(1, 1);
+    const rHp = 0.022 * (1 + 0.45 * style.tanky + 0.15 * style.physical);
+    const rMp = 0.020 * (1 + 0.90 * style.caster);
+    const rAtk = 0.018 * (1 + 0.85 * style.physical);
+    const rMatk = 0.018 * (1 + 1.00 * style.caster);
+    const rDef = 0.015 * (1 + 0.70 * style.tanky);
+    const rStam = 0.015 + 0.012 * style.physical + 0.004 * style.tanky;
+    const stamMax = Math.max(100, Math.round(100 * Math.min(4, 1 + rStam * lf)));
+    let spd = s.spd;
+    try { spd = Math.round((s.spd + Math.min(1.0, 0.008 * lv * style.speedy)) * 10) / 10; } catch (e3) { }
     return {
       lv, xp: 0,
-      maxHp: Math.max(1, Math.round(s.maxHp * m.hp * g2(0.022))),
-      maxMp: Math.max(0, Math.round(s.maxMp * m.mp * g2(0.020))),
-      atk: Math.max(1, Math.round(s.atk * m.atk * g2(0.018))),
-      matk: Math.max(1, Math.round(s.matk * (m.matk != null ? m.matk : m.atk) * g2(0.018))),
-      def: Math.max(0, Math.round(s.def * m.def * g2(0.015))),
+      maxHp: Math.max(1, Math.round(s.maxHp * m.hp * g2(rHp))),
+      maxMp: Math.max(0, Math.round(s.maxMp * m.mp * g2(rMp))),
+      atk: Math.max(1, Math.round(s.atk * m.atk * g2(rAtk))),
+      matk: Math.max(1, Math.round(s.matk * (m.matk != null ? m.matk : m.atk) * g2(rMatk))),
+      def: Math.max(0, Math.round(s.def * m.def * g2(rDef))),
       // no sdef: combatSdef falls back to DEF + gear for NPCs without sdef,
       // so spell defence tracks physical defence automatically
-      spd: s.spd,
+      spd: spd,
+      maxStamina: stamMax, stamina: stamMax,
     };
+  }
+  // ---- NPC spell ceiling: level tiers the bonus kit, never cataclysms ----
+  // (angels exempt — their guarantee lives in ensureAngelPower). Kits always
+  // stay (a lv-1 healer keeps her panacea: it is her job); the ceiling gates
+  // only the BONUS spells a higher level adds on top.
+  function npcSpellMaxTier(role, lv) {
+    try {
+      // angels reach cataclysms at war level like apex mobs; the angel vow
+      // (ensureAngelPower) still grants its cataclysm/deep art at any level
+      if (isAngelRole(role)) { const L0 = Math.max(1, lv | 0 || 1); return L0 >= 40 ? 4 : L0 >= 15 ? 2 : 1; }
+      const G = (window.CFG && window.CFG.NPC_SPELL_GATE) || (window.CFG && window.CFG.MOB_SPELL_GATE) || {};
+      const LV_B = G.LV_BASIC != null ? G.LV_BASIC : 15;
+      const LV_W = G.LV_WAR != null ? G.LV_WAR : 40;
+      const L = Math.max(1, lv | 0 || 1);
+      if (L >= LV_W) return 3;
+      if (L >= LV_B) return 2;
+      return 1;
+    } catch (e) { return 1; }
+  }
+  // Role-fitting bonus attack/support for a level: casters earn battle magic
+  // at 15+, everyone martial earns warcries/ember steel, healers earn cleanse
+  // early, and lv-40s earn the war tier (blessed_weapon for steel hands,
+  // panacea for menders). Never cataclysms — angels get those separately.
+  function npcBonusSpells(role, lv, have) {
+    try {
+      const maxTier = npcSpellMaxTier(role, lv);
+      if (maxTier < 2) return [];
+      const has = new Set(have || []);
+      const R = String(role || "");
+      const casterLean = /mage|scholar|runesmith|tidewarden|succubus|scroll|dawn_angel/.test(R) || /healer|priest|cleric|highpriest|shaman|skald|choir/.test(R);
+      const martial = /warrior|guard|knight|samurai|marshal|rogue|ninja|thief|hunter|adventurer|monarch|seraph|infernal|doom|hellbeast/.test(R);
+      const mender = /healer|priest|cleric|highpriest|shaman|skald|choir|herbalist/.test(R);
+      const T2_ATK = ["lightning", "glacier", "thunder_hex", "smite", "tideburst", "wind_cutter", "whirlpool", "line_of_fire", "icicle_line", "toxic_stab", "tamisra", "life_drain", "immolate", "tornado"];
+      const T2_SUP = ["cleanse", "warcry", "ember_weapon"];
+      const out = [];
+      const take = (id) => {
+        try {
+          if (!id || has.has(id) || out.indexOf(id) >= 0) return;
+          const ab = window.CFG.ABILITIES[id];
+          if (!ab) return;
+          out.push(id); has.add(id);
+        } catch (e2) { }
+      };
+      const pick = (arr) => {
+        const c = arr.filter(a => !has.has(a) && out.indexOf(a) < 0 && window.CFG.ABILITIES[a]);
+        if (!c.length) return null;
+        return c[(Math.random() * c.length) | 0];
+      };
+      if (casterLean) {
+        const n = lv >= 40 ? 2 : 1;
+        for (let i = 0; i < n; i++) { const p = pick(T2_ATK); if (p) take(p); }
+        if (mender && !has.has("cleanse")) take("cleanse");
+      } else if (martial) {
+        const p = pick(["warcry", "ember_weapon", "tornado", "smite", "lightning", "tideburst"]);
+        if (p) take(p);
+        if (lv >= 40) { const p2 = pick(T2_ATK); if (p2) take(p2); }
+      } else {
+        const p = pick(["cleanse", "warcry", "lightning", "tideburst", "smite"]);
+        if (p && lv >= 15) take(p);
+      }
+      if (maxTier >= 3) {
+        if ((martial || /angel|priest|cleric|guard|knight/.test(R)) && !has.has("blessed_weapon")) take("blessed_weapon");
+        if ((mender || casterLean) && !has.has("panacea")) take("panacea");
+      }
+      return out.filter(a => { try { return (spellTierOf(a) || 0) <= maxTier; } catch (e3) { return true; } });
+    } catch (e) { return []; }
+  }
+  // Deep/shallow art matching a weapon family + level: shallow crafts early,
+  // T1 deep at LV_ART1, T2 deep at LV_WAR, T3 deep at LV_ART3. Focus wands
+  // and bare civilian hands earn nothing — casters cast, brawlers brawl.
+  function npcArtFor(weaponFam, lv, isAngel) {
+    try {
+      const G = (window.CFG && window.CFG.NPC_SPELL_GATE) || {};
+      const A1 = G.LV_ART1 != null ? G.LV_ART1 : 20;
+      const W = G.LV_WAR != null ? G.LV_WAR : 40;
+      const A3 = G.LV_ART3 != null ? G.LV_ART3 : 60;
+      const L = Math.max(1, lv | 0 || 1);
+      const SHALLOW = { sword: "glancing_arc", axe: "splinter_hewn", dagger: "wasp_sting", hammer: "knockback_tap", spear: "short_lunge", bow: "twin_nock", whip: "wrist_snap", unarmed: "flowing_strikes", shield: "brace_bash" };
+      const T1 = { dagger: "viper_flurry", unarmed: "iron_palm" };
+      const T2 = { sword: "cinder_edge", axe: "skullsplitter", hammer: "avalanche", spear: "spiral_pike", bow: "thorn_reign", dagger: "viper_flurry", unarmed: "iron_palm", shield: "stalwart_reflector" };
+      const T3 = { hammer: "hammerfell_impact", whip: "thundering_crack", spear: "spiral_pike", bow: "thorn_reign" };
+      if (!weaponFam || weaponFam === "focus") return null;
+      if (weaponFam === "sword" && isAngel && L >= W) return "holy_sword";
+      if (L >= A3 && T3[weaponFam]) return T3[weaponFam];
+      if (L >= W && T2[weaponFam]) return T2[weaponFam];
+      if (L >= A1 && T1[weaponFam]) return T1[weaponFam];
+      if (L >= 10 && SHALLOW[weaponFam]) return SHALLOW[weaponFam];
+      return null;
+    } catch (e) { return null; }
+  }
+  // Every angel carries at least one cataclysm or deep art: martial angels
+  // earn the Holy Sword (needs the sword they already wield), casters earn
+  // Burning Light (holy skyfire). Idempotent — never doubles a kit that
+  // already fields one. Callers top up the MP pool after.
+  function ensureAngelPower(npc) {
+    try {
+      if (!npc || !isAngelRole(npc.role)) return npc;
+      npc.abilities = npc.abilities || [];
+      const AB = (window.CFG && window.CFG.ABILITIES) || {};
+      const hasCata = npc.abilities.some(a => { try { return AB[a] && AB[a].kind === "cataclysm"; } catch (e2) { return false; } });
+      // deep arts only (kind "technique") — shallow crafts don't satisfy the vow
+      const hasDeep = npc.abilities.some(a => { try { return AB[a] && AB[a].kind === "technique"; } catch (e2) { return false; } });
+      if (hasCata || hasDeep) return npc;
+      const martial = /guard/.test(String(npc.role || ""));
+      if (martial) {
+        npc.abilities.push("holy_sword");
+        try {
+          if (npc.equipment && !npc.equipment.weapon && window.Items && window.Items.ITEMS) {
+            const lv = npc.lv || 1;
+            const id = lv >= 85 ? "dragonbone_sword" : lv >= 65 ? "mythril_sword" : lv >= 45 ? "steel_sword" : lv >= 25 ? "iron_sword" : "rusted_sword";
+            if (window.Items.ITEMS[id]) { npc.equipment.weapon = id; try { window.Items.addItem(npc, id, 1); } catch (e3) { } }
+          }
+        } catch (e3) { }
+      } else {
+        const pick = AB["burning_light"] ? "burning_light" : "smite";
+        npc.abilities.push(pick);
+      }
+      npc.disabledAbilities = (npc.disabledAbilities || []).filter(a => a !== "holy_sword" && a !== "burning_light" && a !== "smite");
+      return npc;
+    } catch (e) { return npc; }
+  }
+  // Level-appropriate kit top-up for a spawn or a level-up: bonus spells by
+  // tier (never cataclysms for surf/hell folk), one art matching the main
+  // weapon, the angel guarantee, and an MP pool that can actually cast it.
+  function augmentNpcKit(npc) {
+    try {
+      if (!npc || npc.role === "mob") return npc;
+      npc.abilities = npc.abilities || [];
+      const before = new Set(npc.abilities);
+      const bonus = npcBonusSpells(npc.role, npc.lv || 1, npc.abilities);
+      for (const a of bonus) if (!npc.abilities.includes(a)) npc.abilities.push(a);
+      try {
+        // angels skip the common steel-arts (cinder edges on choirbooks);
+        // their holy power comes from the vow below: Holy Sword for guards,
+        // Burning Light for the rest.
+        var wf_skip_angel_arts = isAngelRole(npc.role);
+        let wf = null;
+        try {
+          const w = npc.equipment && npc.equipment.weapon;
+          wf = npcWeaponFamOf(w) || null;
+          if (!wf && /hunter|rogue|samurai|adventurer/.test(String(npc.role || ""))) wf = "bow";
+          else if (!wf) wf = "sword";
+        } catch (e2) { wf = "sword"; }
+        const art = wf_skip_angel_arts ? null : npcArtFor(wf, npc.lv || 1, false);
+        if (art && !npc.abilities.includes(art)) {
+          const tier = spellTierOf(art) || 0;
+          const maxT = isAngelRole(npc.role) ? 4 : (npc.lv >= 60 ? 3 : npc.lv >= 40 ? 2 : 1);
+          if (tier <= 0 || tier <= maxT) npc.abilities.push(art);
+          else if (!isAngelRole(npc.role) && tier > maxT) { /* steel gated: art waits for level */ }
+        }
+      } catch (e2) { }
+      ensureAngelPower(npc);
+      try {
+        let dearest = 0;
+        for (const a of npc.abilities) { const ab = window.CFG.ABILITIES[a]; if (ab && ab.mp > dearest) dearest = ab.mp; }
+        if (dearest > 0) {
+          const want = wantMpFor(npc.maxMp || 0, dearest, false);
+          if ((npc.maxMp | 0) < want) { npc.maxMp = want; if ((npc.mp | 0) < want) npc.mp = want; }
+        }
+      } catch (e3) { }
+      try {
+        if (npc.maxStamina == null || npc.stamina == null) {
+          const st = makeNpcStatBlock(npc.lv || 1, npc.role, 0, { abilities: npc.abilities, weapon: (npc.equipment && npc.equipment.weapon) || null, armor: (npc.equipment && npc.equipment.armor) || null });
+          if (st && st.maxStamina) { npc.maxStamina = st.maxStamina; npc.stamina = st.stamina; }
+          else { npc.maxStamina = npc.maxStamina || 100; npc.stamina = npc.stamina != null ? npc.stamina : npc.maxStamina; }
+        }
+      } catch (e4) { }
+      return npc;
+    } catch (e) { return npc; }
   }
   // ---- per-mob growth roles (Nov 2026) ----
   // Every kind scales differently: its template is the level-1 body and each
@@ -966,12 +1264,15 @@ window.Entities = (() => {
       tint: t.tint, lv, xp: 0, xpReward: Math.round(t.xp * xpMult),
       maxHp: mobScaledStat(t.hp, g.hp, lf, g.hpCap),
       maxMp: mobScaledStat(t.mp, g.mp, lf, g.mpCap != null ? g.mpCap : g.hpCap),
-      atk: mobScaledStat(t.atk, g.atk, lf, g.atkCap),
-      // spell power: casters grow this faster than their claws (see
-      // abilityDmg — mob spells ride matk, physical rides atk)
-      matk: mobScaledStat(t.atk, g.matk, lf, g.matkCap != null ? g.matkCap : g.atkCap),
-      def: mobScaledStat(t.def, g.def, lf, g.defCap != null ? g.defCap : g.atkCap),
-      sdef: mobScaledStat(t.def, g.sdef, lf, g.sdefCap != null ? g.sdefCap : g.atkCap),
+     atk: mobScaledStat(t.atk, g.atk, lf, g.atkCap),
+     // spell power: casters grow this faster than their claws (see
+      // abilityDmg — mob spells ride matk, physical rides atk). matk/sdef
+      // are independent template stats now: a kind may set its own matk
+      // (spell power) and sdef (spell defence) bases; when omitted they
+      // default to atk/def exactly as before.
+      matk: mobScaledStat(t.matk != null ? t.matk : t.atk, g.matk, lf, g.matkCap != null ? g.matkCap : g.atkCap),
+     def: mobScaledStat(t.def, g.def, lf, g.defCap != null ? g.defCap : g.atkCap),
+      sdef: mobScaledStat(t.sdef != null ? t.sdef : t.def, g.sdef, lf, g.sdefCap != null ? g.sdefCap : g.atkCap),
       spd: Math.round(((t.spd || 3) + Math.min(g.spdCap, g.spdRate * n * (1 + n / 60))) * 10) / 10,
       // stamina pools grow too (bosses sprint/flurry/parry off them); the
       // field must exist so the guard never routes a mob through the player
@@ -990,10 +1291,11 @@ window.Entities = (() => {
     // from CFG.BOSS_TIER_BULK (v252 fit to the distribution table): low tiers
     // pool UP, hell tiers pool down, Peter/goddess (12) pool modestly — the
     // old 100x band and the v251 HP_T are both gone; the table IS the bulk
-    // now. Bulwark: each warlord's spell defence (sdef) runs a little off
-    // its physical DEF per BOSS_BULWARK (frail side ~15% lower), so SDEF
-    // inherits the DEF band automatically.
-    if (isBossKind) {
+   // now. Bulwark: each warlord's spell defence (sdef) runs a little off
+   // its physical DEF per BOSS_BULWARK (frail side ~15% lower), so SDEF
+    // inherits the DEF band automatically — unless the template sets its own
+    // sdef, which takes manual control and skips the bulwark derivation.
+   if (isBossKind) {
       try {
         const tier = (window.CFG.BOSS_MIN_EFF && window.CFG.BOSS_MIN_EFF[kind]) || 1;
         const t = Math.max(0, (tier | 0) - 1);
@@ -1001,7 +1303,8 @@ window.Entities = (() => {
         // multipliers from CFG.BOSS_TIER_BULK. HP carries tier identity
         // (low tiers pool up, hell tiers pool DOWN vs the old 100x band);
         // ATK/MATK climb gently, DEF is flat per band. SDEF follows DEF via
-        // bulwark below, so it inherits the DEF band automatically.
+        // bulwark below (no explicit sdef), so it inherits the DEF band
+        // automatically.
         const TB = (window.CFG && window.CFG.BOSS_TIER_BULK) || null;
         const hpB = (TB && TB.HP[tier] != null) ? TB.HP[tier] : 12.5;
         const atkB = (TB && TB.ATK[tier] != null) ? TB.ATK[tier] : (1 + t * 0.08);
@@ -1014,8 +1317,13 @@ window.Entities = (() => {
         mob.maxMp = Math.round(mob.maxMp * (1 + t * 0.15));
         mob.xpReward = Math.round(mob.xpReward * (1 + t * 0.25));
         try {
+          // explicit template sdef = manual control (bulwark yields); without
+          // one the bulwark derivation below is bit-for-bit what it always was
+          const _tpl = ((window.CFG && window.CFG.MOB_TEMPLATES) || {})[mob.kind] || {};
+          if (_tpl.sdef == null) {
           const prof = (window.CFG.BOSS_BULWARK || {})[kind] || {};
           mob.sdef = Math.max(0, Math.round(mob.def * (prof.frail === "mag" ? 0.85 : 1.15)));
+          }
         } catch (e2) { }
       } catch (e) { }
     }
@@ -1099,7 +1407,10 @@ window.Entities = (() => {
  // No cap — the spawn loadout below is where the 12-pick limit lives. Bosses:
  // template signatures + every pooled spell/tech at/below their depth tier.
   // Ordinary mobs: signatures + body pool, seasoned killers (xp>=100) + war
-  // spins (tornado) + T1-2 arts, apex horrors (xp>=150) + cataclysms + T3 arts.
+  // spins (tornado) + T1-2 arts, apex horrors (xp>=150) + cataclysms + T3 arts —
+  // all of it under the level + kind-power spell ceiling (mobSpellMaxTier):
+  // under lv 15 hedge only, under lv 40 battle, lv 40+ up to the kind's cap,
+  // and weak kinds (xp<40) never rise above hedge. Bosses ignore the ceiling.
   // Mimics keep teeth only (no tier bonuses — ambush + skyfall is unfair).
   // Boss compatibility: a warlord only fields attack magic sharing an element
   // with its template signatures (fire bosses breathe fire, water bosses the
@@ -1138,7 +1449,137 @@ window.Entities = (() => {
       return false;
     } catch (e) { return true; }
   }
- function movepoolFor(kind) {
+ // Spell ceiling for a wild mob (bosses exempt): the LOWER of the level
+  // tier (under LV_BASIC hedge only, under LV_WAR battle, LV_WAR+ uncapped)
+  // and the kind tier (template XP: XP_MID+ battle, POWER_XP+ war,
+  // APEX_XP+ cataclysms; weaker kinds cap at hedge whatever their level).
+  function mobSpellMaxTier(kind, lv) {
+    try {
+      const T = ((window.CFG && window.CFG.MOB_TEMPLATES) || {})[kind] || {};
+      const xp = (T.xp | 0) || 0;
+      const PA = (window.CFG && window.CFG.MOB_ARSENAL) || {};
+      const APEX = PA.APEX_XP != null ? PA.APEX_XP : 150;
+      const POWER = PA.POWER_XP != null ? PA.POWER_XP : 100;
+      const G = (window.CFG && window.CFG.MOB_SPELL_GATE) || {};
+      const LV_B = G.LV_BASIC != null ? G.LV_BASIC : 15;
+      const LV_W = G.LV_WAR != null ? G.LV_WAR : 40;
+      const XM = G.XP_MID != null ? G.XP_MID : 40;
+      const L = Math.max(1, lv | 0 || 1);
+      const levelTier = L >= LV_W ? 4 : L >= LV_B ? 2 : 1;
+      const kindTier = xp >= APEX ? 4 : xp >= POWER ? 3 : xp >= XM ? 2 : 1;
+      return Math.min(levelTier, kindTier);
+    } catch (e) { return 1; }
+  }
+  // ---- martial vs caster: only lore-sensible kinds cast attack magic ----
+  // Martial kinds (brawlers, beasts, archers, teeth) fight with steel +
+  // shallow/deep arts + physical spins/bites; they never learn projectile /
+  // aoe / cataclysm magic. Everyone else (shamans, ghosts, dragons, fiend
+  // casters, serenes) keeps the old spell pools. Bosses are exempt — the
+  // boss branch below tiers them by depth instead.
+  const MOB_MARTIAL = new Set([
+    "slime", "bat", "goblin", "wolf", "mushroom", "wild_horse",
+    "stable_pony", "stable_courser", "stable_destrier", "stable_zephyr", "stable_aegis",
+    "tide_turtle", "cinder_steed", "skeleton", "velociraptor",
+    "minotaur_calf", "harpy", "cyclops_whelp", "satyr", "centaur_foal",
+    "stymphalian", "gorgon_spawn", "hydra_spawn", "kobold", "draugr",
+    "troll_whelp", "fenrir_pup", "lindworm", "anubite", "scarab_swarm",
+    "mummy", "sobek_spawn", "khepri_beetle", "gasha_skull", "nurikabe",
+    "redcap", "dullahan_herald", "leshy", "striga", "domovoi_rogue",
+    "jiangshi", "goblin_brute", "orc_grunt", "gnoll", "gnoll_hunter",
+    "bandit", "outlaw", "murderer", "gloomspinner", "sandmaw",
+    "burrow_mole", "giant_tarantula", "tomb_scorpion", "siege_ant",
+    "hive_hornet", "coral_crab", "mire_lurker", "abyss_tentacle",
+    "lesser_mimic", "mimic", "greater_mimic", "mimic_devourer", "doppelganger",
+    "crag_fiend", "ash_hound", "charred_colossus", "soot_stalker",
+    "gore_hound", "sanguine_horror", "vein_lurker", "clot_brute",
+    "coagulus", "hemorrhage", "obsidian_shard", "glass_maw",
+    "obsidian_golem", "shard_ravager", "glass_spider", "marrow_eater",
+    "ossuary_crawler", "ossuary_hound", "ribcage_walker", "ivory_tyrantkin",
+    "flesh_mound", "gut_lurker", "sinew_stalker", "maw_walker",
+    "bile_spitter", "organ_swarm", "gullet_worm", "muscle_brute",
+    "pulse_mass", "demon_warden",
+  ]);
+  function isSpellcasterKind(kind) {
+    try {
+      const T = ((window.CFG && window.CFG.MOB_TEMPLATES) || {})[kind] || {};
+      if (T.boss || (window.CFG.BOSS_KINDS || []).indexOf(kind) >= 0) return true;
+      return !MOB_MARTIAL.has(kind);
+    } catch (e) { return true; }
+  }
+  function isShallowAb(a) {
+    try { return !!(window.CFG.ABILITIES[a] && window.CFG.ABILITIES[a].kind === "shallow"); } catch (e) { return false; }
+  }
+  function isDeepAb(a) {
+    try { return !!(window.CFG.ABILITIES[a] && window.CFG.ABILITIES[a].kind === "technique"); } catch (e) { return false; }
+  }
+  function shallowIdsAll() {
+    try {
+      const AB = window.CFG.ABILITIES || {};
+      const out = Object.keys(AB).filter(a => AB[a] && AB[a].kind === "shallow");
+      if (out.length) return out;
+    } catch (e) { }
+    return ["flowing_strikes", "faux_chop", "one_armed_guard", "glancing_arc", "splinter_hewn", "wasp_sting", "knockback_tap", "short_lunge", "twin_nock", "wrist_snap", "palm_star", "brace_bash"];
+  }
+  // Weapon-matched shallow for a martial kind (body + archer + shieldwall).
+  function martialShallowsFor(kind, Tpl) {
+    try {
+      const T = Tpl || {};
+      const out = [];
+      if (T.archer) out.push("twin_nock");
+      else {
+        const body = T.body || "";
+        if (body === "brute") out.push("splinter_hewn");
+        else if (body === "beast" || body === "serpent" || body === "swarm" || body === "blob" || body === "winged" || body === "ghost") out.push("flowing_strikes");
+        else out.push("faux_chop");
+      }
+      try {
+        const sig = (T.abilities || []);
+        if (sig.indexOf("shieldwall") >= 0 && out.indexOf("brace_bash") < 0) out.push("brace_bash");
+      } catch (e2) { }
+      return out.filter(a => { try { return !!window.CFG.ABILITIES[a]; } catch (e3) { return false; } });
+    } catch (e) { return ["faux_chop"]; }
+  }
+  // Family-matched deep arts for a martial kind (share steel with the shallow).
+  function martialTechsFor(kind, Tpl) {
+    try {
+      const T = Tpl || {};
+      if (T.archer) return ["thorn_reign", "comet_shot"].filter(a => { try { return !!window.CFG.ABILITIES[a]; } catch (e) { return false; } });
+      const body = T.body || "";
+      if (body === "beast" || body === "serpent" || body === "swarm" || body === "blob" || body === "winged" || body === "ghost") {
+        const out = ["iron_palm"];
+        try { if ((T.abilities || []).indexOf("shieldwall") >= 0) out.push("stalwart_reflector"); } catch (e2) { }
+        return out.filter(a => { try { return !!window.CFG.ABILITIES[a]; } catch (e3) { return false; } });
+      }
+      if (body === "brute") return ["skullsplitter"].filter(a => { try { return !!window.CFG.ABILITIES[a]; } catch (e) { return false; } });
+      return ["skullsplitter", "cinder_edge", "viper_flurry", "feint_attack"].filter(a => { try { return !!window.CFG.ABILITIES[a]; } catch (e) { return false; } });
+    } catch (e) { return []; }
+  }
+  // Appropriate shallows for a boss: match the families of its deep techs,
+  // fall back to the martial body mapping so every warlord gets steel-arts.
+  function bossShallowsFor(kind, Tpl, techs) {
+    try {
+      const famToShallow = { sword: "glancing_arc", axe: "splinter_hewn", dagger: "wasp_sting", hammer: "knockback_tap", spear: "short_lunge", bow: "twin_nock", whip: "wrist_snap", unarmed: "flowing_strikes", shield: "brace_bash", thrown: "palm_star" };
+      const out = [];
+      const push = (a) => { try { if (a && window.CFG.ABILITIES[a] && out.indexOf(a) < 0) out.push(a); } catch (e2) { } };
+      try {
+        for (const a of (techs || [])) {
+          let fams = [];
+          try { if (window.Entities && window.Entities.techWeaponFams) fams = window.Entities.techWeaponFams(a) || []; } catch (e2) { }
+          if (!fams.length) { try { const f0 = (typeof techWeaponFam === "function") ? techWeaponFam(a) : null; if (f0) fams = [f0]; } catch (e3) { } }
+          if (!fams.length && a === "palm_star") fams = ["thrown"];
+          for (const f of fams) { const s = famToShallow[f]; if (s) push(s); }
+          if (out.length >= 2) break;
+        }
+      } catch (e2) { }
+      try {
+        for (const s of martialShallowsFor(kind, Tpl || {})) { push(s); if (out.length >= 2) break; }
+      } catch (e2) { }
+      if (!out.length) push("faux_chop");
+      if (out.length < 2) push(out[0] === "flowing_strikes" ? "brace_bash" : "flowing_strikes");
+      return out.slice(0, 3);
+    } catch (e) { return ["faux_chop", "flowing_strikes"]; }
+  }
+  function movepoolFor(kind) {
    try {
      const T = (window.CFG.MOB_TEMPLATES || {})[kind] || {};
      const AB = window.CFG.ABILITIES || {};
@@ -1151,7 +1592,7 @@ window.Entities = (() => {
        const ab = AB[a];
        if (!ab) return;
        seen.add(a);
-       if (ab.kind === "technique") techs.push(a);
+       if (ab.kind === "technique" || ab.kind === "shallow") techs.push(a);
        else spells.push(a);
      };
      for (const a of (T.abilities || [])) add(a);
@@ -1159,8 +1600,24 @@ window.Entities = (() => {
        const maxTier = bossMagicTier(kind, 100);
         for (const a of Object.keys(ST)) { try { if (ST[a] <= maxTier && bossSpellAllowed(kind, a)) add(a); } catch (e2) { } }
         for (const a of Object.keys(TT)) { try { if (TT[a] <= maxTier) add(a); } catch (e2) { } }
+        for (const a of shallowIdsAll()) { try { if (bossSpellAllowed(kind, a)) add(a); } catch (e2) { } }
        return { spells, techs, maxTier, isBoss: true };
      }
+      const casterKind = isSpellcasterKind(kind);
+      if (!casterKind) {
+        for (const s of martialShallowsFor(kind, T)) add(s);
+        for (const a of martialTechsFor(kind, T)) add(a);
+        if (!isMimicKindLocal(kind)) {
+          const xpM = T.xp | 0 || 0;
+          const PAM = (window.CFG.MOB_ARSENAL || {});
+          const APEXM = PAM.APEX_XP != null ? PAM.APEX_XP : 150;
+          if (xpM >= APEXM) {
+            for (const a of Object.keys(TT)) { try { if (TT[a] === 3) add(a); } catch (e2) { } }
+          }
+          return { spells, techs, maxTier: 1, isBoss: false };
+        }
+        return { spells, techs, maxTier: 1, isBoss: false };
+      }
       for (const a of bodyPoolFor(T.body)) add(a);
       if (!isMimicKindLocal(kind)) {
         const xp = T.xp | 0 || 0;
@@ -1202,6 +1659,7 @@ window.Entities = (() => {
       const ab = AB[a];
       if (!ab) return 0;
       if (ab.kind === "technique") return (window.CFG.TECH_TIER || {})[a] || 0;
+      if (ab.kind === "shallow") return 1;
       return (window.CFG.SPELL_TIER || {})[a] || 0;
     } catch (e) { return 0; }
   }
@@ -1223,13 +1681,33 @@ window.Entities = (() => {
   // up to 12 from their (uncapped) movepool: at least 3 of the highest-tier
   // SPELLS they can field (shortfall cascades a tier down) plus at least 2
   // TECHNIQUES (shortfall substitutes another high-tier spell, per spec);
-  // powerful mobs guarantee war-magic (tornado), apex horrors a cataclysm
-  // + an art.
+  // powerful mobs guarantee war-magic (tornado, lv 15+), apex horrors a
+  // cataclysm (lv 40+ apex only) + an art.
   function augmentMobSpells(mob, t, isBossKind) {
     const pool = movepoolFor(mob.kind);
     const has = (a) => mob.abilities.includes(a);
     const isTechAb = (a) => { try { return window.CFG.ABILITIES[a] && window.CFG.ABILITIES[a].kind === "technique"; } catch (e) { return false; } };
+    const isShallowAbL = (a) => { try { return window.CFG.ABILITIES[a] && window.CFG.ABILITIES[a].kind === "shallow"; } catch (e) { return false; } };
     if (isBossKind) {
+      if (mob.kind === "peter_the_fallen") {
+        try {
+          const ABP = window.CFG.ABILITIES || {};
+          const full = [];
+          for (const a of Object.keys(ABP)) {
+            try {
+              if (a === "angel_of_life" || a === "eject" || a === "grapple" || a === "revive") continue;
+              const k = ABP[a] && ABP[a].kind;
+              if (k === "projectile" || k === "aoe" || k === "cataclysm" || k === "heal" || k === "support" || k === "buff" || k === "blink" || k === "technique" || k === "shallow") full.push(a);
+            } catch (eP) { }
+          }
+          const seenP = new Set();
+          mob.abilities = full.filter(a => { if (seenP.has(a)) return false; seenP.add(a); return true; });
+        } catch (eP) { }
+        let dearP = 0;
+        for (const a of mob.abilities) { try { const ab = window.CFG.ABILITIES[a]; if (ab && ab.mp > dearP) dearP = ab.mp; } catch (eP2) { } }
+        try { const wantP = wantMpFor(t.mp, dearP, true); if (mob.maxMp < wantP) mob.maxMp = wantP; } catch (eP3) { }
+        return;
+      }
       if (!has("heal")) mob.abilities.push("heal");
       if (!has("panacea") && !has("cleanse")) mob.abilities.push("panacea");
       // effective tier (the lying gate scales with its spawn level, not depth)
@@ -1241,7 +1719,7 @@ window.Entities = (() => {
         return tier > 0 && tier <= effTier;
       });
       const take = (a) => {
-        if (mob.abilities.length >= 12) return false;
+        if (mob.abilities.length >= 14) return false;
         mob.abilities.push(a);
         const ix = allowed.indexOf(a);
         if (ix >= 0) allowed.splice(ix, 1);
@@ -1256,7 +1734,7 @@ window.Entities = (() => {
       for (let tier = effTier; tier >= 1 && needSpells > 0; tier--) {
         const cands = shuffleIn(allowed.filter(a => !isTechAb(a) && spellTierOf(a) === tier && isAttackAb(a)));
         for (const a of cands) {
-          if (needSpells <= 0 || mob.abilities.length >= 12) break;
+          if (needSpells <= 0 || mob.abilities.length >= 14) break;
           take(a);
           needSpells--;
         }
@@ -1270,7 +1748,7 @@ window.Entities = (() => {
       for (let tier = effTier; tier >= 1 && needTechs > 0; tier--) {
         const cands = shuffleIn(allowed.filter(a => isTechAb(a) && spellTierOf(a) === tier));
         for (const a of cands) {
-          if (needTechs <= 0 || mob.abilities.length >= 12) break;
+          if (needTechs <= 0 || mob.abilities.length >= 14) break;
           take(a);
           needTechs--;
         }
@@ -1280,52 +1758,118 @@ window.Entities = (() => {
         for (let tier = effTier; tier >= 1 && needTechs > 0; tier--) {
           const cands = shuffleIn(allowed.filter(a => !isTechAb(a) && spellTierOf(a) === tier && isAttackAb(a)));
           for (const a of cands) {
-            if (needTechs <= 0 || mob.abilities.length >= 12) break;
+            if (needTechs <= 0 || mob.abilities.length >= 14) break;
             take(a);
             needTechs--;
           }
         }
       }
-      // random fill to the 12-pick cap (care + signatures + top-tier first)
-      for (const a of shuffleIn(allowed)) {
-        if (mob.abilities.length >= 12) break;
+      try {
+        let needShallow = 2;
+        for (const a of mob.abilities) { try { if (isShallowAbL(a)) needShallow--; } catch (eS) { } }
+        needShallow = Math.max(0, needShallow);
+        if (needShallow > 0) {
+          let pref = [];
+          try { pref = bossShallowsFor(mob.kind, t, mob.abilities.filter(a => isTechAb(a))) || []; } catch (eS2) { pref = []; }
+          for (const s of pref) { if (needShallow <= 0 || mob.abilities.length >= 14) break; if (!has(s) && allowed.indexOf(s) >= 0) { take(s); needShallow--; } }
+          if (needShallow > 0) {
+            const cands = shuffleIn(allowed.filter(a => isShallowAbL(a)));
+            for (const a of cands) { if (needShallow <= 0 || mob.abilities.length >= 14) break; take(a); needShallow--; }
+          }
+        }
+      } catch (eS) { }
+      // random fill to the 14-pick cap (care + signatures + top-tier first;
+      // shallows already guaranteed above, so fill with spells/deeps only —
+      // and never more than 3 shallows total (variety, not an art lecture)
+      for (const a of shuffleIn(allowed.filter(a => !isShallowAbL(a)))) {
+        if (mob.abilities.length >= 14) break;
         mob.abilities.push(a);
       }
+      try {
+        let nSh = mob.abilities.filter(a => isShallowAbL(a)).length;
+        for (const a of shuffleIn(allowed)) {
+          if (mob.abilities.length >= 14) break;
+          if (mob.abilities.includes(a)) continue;
+          if (isShallowAbL(a) && nSh >= 3) continue;
+          mob.abilities.push(a);
+          if (isShallowAbL(a)) nSh++;
+        }
+      } catch (eF) { }
     } else {
       // 1-2 random bonus attack spells (projectiles/status), never duplicates
+      // level + kind-power ceiling for this spawn's spells (bosses exempt;
+      // weapon arts are untouched — steel is gated separately)
+      const maxTier = mobSpellMaxTier(mob.kind, mob.lv);
+      // strip signatures above the ceiling (unlisted utility — blinks, pulls —
+      // and weapon arts always stay; a stripped blaster falls back on melee)
+      try {
+        mob.abilities = mob.abilities.filter(a => {
+          try {
+            const ab = window.CFG.ABILITIES[a];
+            if (!ab || ab.kind === "technique" || ab.kind === "shallow") return true;
+            const tier = spellTierOf(a) || 0;
+            return tier <= 0 || tier <= maxTier;
+          } catch (e2) { return true; }
+        });
+      } catch (e2) { }
+      let casterSpawn = true;
+      try { casterSpawn = isSpellcasterKind(mob.kind); } catch (eM) { casterSpawn = true; }
+      if (!casterSpawn) {
+        try {
+          const aq = !!(t && t.aquatic);
+          mob.abilities = mob.abilities.filter(a => {
+            try {
+              const ab = window.CFG.ABILITIES[a];
+              if (!ab) return true;
+              const k = ab.kind;
+              if (k === "technique" || k === "shallow" || k === "heal" || k === "support" || k === "revive" || k === "buff" || k === "blink" || k === "eject" || k === "pull") return true;
+              if (a === "whirlwind" || a === "tornado") return true;
+              if (a === "venom" || a === "toxic_stab") return true;
+              if ((a === "water_jet" || a === "whirlpool" || a === "tideburst") && aq) return true;
+              return false;
+            } catch (eM2) { return true; }
+          });
+        } catch (eM3) { }
+      }
       const tplAttacks = mob.abilities.filter(isAttackAb).length;
       const targetAttacks = Math.min(4, tplAttacks + 2);
       const bodyPool = bodyPoolFor((t && t.body) || "");
       const countAttacks = () => mob.abilities.filter(a => { const ab = window.CFG.ABILITIES[a]; return ab && (ab.kind === "projectile" || ab.kind === "aoe"); }).length;
       let guard = 0;
-      while (countAttacks() < targetAttacks && guard++ < 10) {
+      if (casterSpawn) while (countAttacks() < targetAttacks && guard++ < 10) {
         const pick = bodyPool[(Math.random() * bodyPool.length) | 0];
         if (!pick || mob.abilities.includes(pick)) continue;
         const ab = window.CFG.ABILITIES[pick];
         if (!ab || ab.kind === "heal" || ab.kind === "support" || ab.kind === "revive" || ab.kind === "buff") continue;
+        if ((spellTierOf(pick) || 0) > maxTier) continue;
         mob.abilities.push(pick);
         if (countAttacks() >= 3 && Math.random() < 0.5) break;
         if (mob.abilities.length >= 7) break;
       }
-      // power bands (never mimics): war-magic for seasoned killers, a
-      // thematic cataclysm + an art for apex horrors
+      // power bands (never mimics), all under the spell ceiling:
+      // war-magic for seasoned killers (lv 15+), a thematic cataclysm + an
+      // art for apex horrors (lv 40+ apex only)
       try {
         if (!isMimicKindLocal(mob.kind)) {
           const xp = (t && t.xp | 0) || 0;
           const PA = (window.CFG.MOB_ARSENAL || {});
           const APEX = PA.APEX_XP != null ? PA.APEX_XP : 150;
           const POWER = PA.POWER_XP != null ? PA.POWER_XP : 100;
-          if (xp >= POWER && !has("tornado") && mob.abilities.length < 7) mob.abilities.push("tornado");
-          if (xp >= APEX) {
+          if (xp >= POWER && maxTier >= 2 && !has("tornado") && mob.abilities.length < 7) mob.abilities.push("tornado");
+          if (!casterSpawn) {
+            const mLv = Math.max(1, mob.lv | 0 || 1);
+            if (mLv >= 10) { for (const s of martialShallowsFor(mob.kind, t)) { if (mob.abilities.length >= 7) break; if (!has(s)) mob.abilities.push(s); } }
+          }
+          if (xp >= APEX && maxTier >= 4 && casterSpawn) {
             if (!mob.abilities.some(a => { const ab = window.CFG.ABILITIES[a]; return ab && ab.kind === "cataclysm"; }) && mob.abilities.length < 7)
               mob.abilities.push(thematicCataclysm(t, mob.abilities));
-            const techs = (pool.techs || []).filter(a => !has(a));
+            const techs = (pool.techs || []).filter(a => !has(a) && window.CFG.ABILITIES[a] && window.CFG.ABILITIES[a].kind === "technique");
             // apex horror leads with its deepest art (cascade down if none)
             techs.sort((a, b) => spellTierOf(b) - spellTierOf(a));
             if (techs.length && !mob.abilities.some(a => window.CFG.ABILITIES[a] && window.CFG.ABILITIES[a].kind === "technique") && mob.abilities.length < 7)
               mob.abilities.push(techs[(Math.random() * Math.min(techs.length, 5)) | 0]);
           } else if (xp >= POWER) {
-            const techs = (pool.techs || []).filter(a => !has(a) && spellTierOf(a) <= 2);
+            const techs = (pool.techs || []).filter(a => !has(a) && spellTierOf(a) <= 2 && window.CFG.ABILITIES[a] && window.CFG.ABILITIES[a].kind === "technique");
             if (techs.length && !mob.abilities.some(a => window.CFG.ABILITIES[a] && window.CFG.ABILITIES[a].kind === "technique") && mob.abilities.length < 7)
               mob.abilities.push(techs[(Math.random() * techs.length) | 0]);
           }
@@ -1379,7 +1923,7 @@ window.Entities = (() => {
       const mp = movepoolFor(kind) || {};
       const techs = [...(mp.techs || [])];
       if (!techs.length) return { weapon: null, shield: null, fam: null };
-      techs.sort((a, b) => (spellTierOf(b) - spellTierOf(a)) || (a < b ? -1 : a > b ? 1 : 0));
+      techs.sort((a, b) => { try { const ka = window.CFG.ABILITIES[a] && window.CFG.ABILITIES[a].kind; const kb = window.CFG.ABILITIES[b] && window.CFG.ABILITIES[b].kind; const da = ka === "technique" ? 1 : 0, db = kb === "technique" ? 1 : 0; if (da !== db) return db - da; } catch (eS) { } return (spellTierOf(b) - spellTierOf(a)) || (a < b ? -1 : a > b ? 1 : 0); });
       const fam = techWeaponFam(techs[0]);
       let tier = 0;
       try {
@@ -1397,8 +1941,10 @@ window.Entities = (() => {
       const mp = movepoolFor(kind) || {};
       const out = [];
       for (const a of (mp.techs || [])) {
-        const f = techWeaponFam(a) || "unarmed";
-        if (out.indexOf(f) < 0) out.push(f);
+        let fs = [];
+        try { if (typeof techWeaponFams === "function") fs = techWeaponFams(a) || []; } catch (e2) { }
+        if (!fs.length) { const f0 = techWeaponFam(a) || "unarmed"; fs = [f0]; }
+        for (const f of fs) if (out.indexOf(f) < 0) out.push(f);
       }
       return out;
     } catch (e) { return []; }
@@ -1410,7 +1956,7 @@ window.Entities = (() => {
     try {
       if (!mob || isBossMobKind(mob.kind)) return mob;
       const abs = mob.abilities || [];
-      const techs = abs.filter(a => { try { return window.CFG.ABILITIES[a] && window.CFG.ABILITIES[a].kind === "technique"; } catch (e) { return false; } });
+      const techs = abs.filter(a => { try { const k = window.CFG.ABILITIES[a] && window.CFG.ABILITIES[a].kind; return k === "technique" || k === "shallow"; } catch (e) { return false; } });
       if (!techs.length) return mob;
       if (!mob.equipment || typeof mob.equipment !== "object") mob.equipment = { weapon: null, armor: null, trinket: null, shield: null };
       let tier = 0;
@@ -1419,7 +1965,7 @@ window.Entities = (() => {
         tier = mobWarTier(mob.lv, false, (T.xp | 0) || 0);
       } catch (e2) { try { tier = mobWarTier(mob.lv, false, 0); } catch (e3) { tier = 0; } }
       tier = Math.max(0, Math.min(5, tier));
-      techs.sort((a, b) => (spellTierOf(b) - spellTierOf(a)) || (a < b ? -1 : a > b ? 1 : 0));
+      techs.sort((a, b) => { try { const ka = window.CFG.ABILITIES[a] && window.CFG.ABILITIES[a].kind; const kb = window.CFG.ABILITIES[b] && window.CFG.ABILITIES[b].kind; const da = ka === "technique" ? 1 : 0, db = kb === "technique" ? 1 : 0; if (da !== db) return db - da; } catch (eS) { } return (spellTierOf(b) - spellTierOf(a)) || (a < b ? -1 : a > b ? 1 : 0); });
       let weapon = null, shield = null;
       for (const a of techs) {
         const f = techWeaponFam(a);
@@ -1554,6 +2100,13 @@ window.Entities = (() => {
       // plate first: art-wielders keep their steel but still dress for band
       try { fitMobArmor(mob, tier); } catch (eA) { }
       if (mob.equipment.weapon) return mob; // art steel already fitted
+      try {
+        const absU = mob.abilities || [];
+        const hasUnarmedArt = absU.some(a => { try { const ab = window.CFG.ABILITIES[a]; if (!ab) return false; if (ab.kind !== "technique" && ab.kind !== "shallow") return false; let fs = []; try { if (window.Entities && window.Entities.techWeaponFams) fs = window.Entities.techWeaponFams(a) || []; } catch (eU) { }
+          if (!fs.length) { try { const f0 = techWeaponFam(a); fs = f0 ? [f0] : []; } catch (eU2) { } }
+          if (!fs.length) return true; return fs.length === 1 && fs[0] === "unarmed"; } catch (eU3) { return false; } });
+        if (hasUnarmedArt) return mob;
+      } catch (eU) { }
       const isArcherTpl = !!(Tpl && Tpl.archer);
       const takeBow = isArcherTpl || Math.random() < 0.22;
       if (takeBow) {
@@ -1646,12 +2199,33 @@ window.Entities = (() => {
   function techWeaponFam(techId) {
     try {
       // thrown arts need no weapon wielded — the star leaves from the hand
-      if (techId === "exploding_shuriken" || techId === "slime_shuriken") return null;
-      if (window.CFG && window.CFG.TECH_WEAPON_FAM && window.CFG.TECH_WEAPON_FAM[techId]) return window.CFG.TECH_WEAPON_FAM[techId];
+      if (techId === "exploding_shuriken" || techId === "slime_shuriken" || techId === "palm_star") return null;
+      if (window.CFG && window.CFG.TECH_WEAPON_FAM && Object.prototype.hasOwnProperty.call(window.CFG.TECH_WEAPON_FAM, techId)) {
+        const v = window.CFG.TECH_WEAPON_FAM[techId];
+        if (v == null) return null;
+        if (Array.isArray(v)) return v[0] || null;
+        return v;
+      }
       const t = window.CFG && window.CFG.TECHNIQUES && window.CFG.TECHNIQUES[techId];
       if (t && t.req && t.req.fam) { const k = Object.keys(t.req.fam); if (k.length) return k[0]; }
     } catch (e) { }
     return null;
+  }
+  // Shallow arts may accept several families (Faux Chop: axe/sword/dagger).
+  // Returns the full accepted list; single-family arts return one entry.
+  function techWeaponFams(techId) {
+    try {
+      if (techId === "exploding_shuriken" || techId === "slime_shuriken" || techId === "palm_star") return [];
+      if (window.CFG && window.CFG.TECH_WEAPON_FAM && Object.prototype.hasOwnProperty.call(window.CFG.TECH_WEAPON_FAM, techId)) {
+        const v = window.CFG.TECH_WEAPON_FAM[techId];
+        if (v == null) return [];
+        if (Array.isArray(v)) return v.slice();
+        return [v];
+      }
+      const tt = window.CFG && window.CFG.TECHNIQUES && window.CFG.TECHNIQUES[techId];
+      if (tt && tt.req && tt.req.fam) { const k = Object.keys(tt.req.fam); if (k.length) return [k[0]]; }
+    } catch (e) { }
+    return [];
   }
   function techWeaponName(fam) {
     try {
@@ -1700,7 +2274,7 @@ window.Entities = (() => {
     try {
       const ab = window.CFG && window.CFG.ABILITIES ? window.CFG.ABILITIES[abId] : null;
       if (!ab) return 0;
-      if (ab.kind === "technique") return 0;
+      if (ab.kind === "technique" || ab.kind === "shallow") return 0;
       const depth = spellAncestors(abId).length;
       if (depth <= 0) return 0;
       if (ab.kind !== "projectile" && ab.kind !== "support" && ab.kind !== "cataclysm") return 0;
@@ -1746,13 +2320,75 @@ window.Entities = (() => {
   // bowPower (+ tier) for bows, 1x unarmed. Multiplied into projectile
   // technique damage at cast time (melee techniques already ride all of it
   // through combatDmg("strike") → meleeMult + weaponMeleeMult).
+  // Per-family weapon damage mult (no wield requirement): +8%/rank on the
+  // family's base node, spear phalanx guard-bonus, capstone on top. Lets
+  // multi-family arts (Faux Chop) gain EVERY listed tree at once.
+  function weaponBaseMultFor(p, fam) {
+    try {
+      if (!p || p.kind !== "player") return 1;
+      const base = { sword: "edge", axe: "hewn", hammer: "crush", dagger: "fang", whip: "lash", spear: "point", bow: "draw", wand: "focus", staff: "power", unarmed: "stance" }[fam];
+      if (!base) return 1;
+      let m = 1 + 0.08 * wrank(p, fam, base);
+      if (fam === "spear") m *= 1 + 0.05 * wrank(p, "spear", "phalanx");
+      const cap = { sword: "master", axe: "reaver", hammer: "juggernaut", dagger: "assassin", whip: "crackmaster", spear: "lancer", bow: "huntsmaster", unarmed: "grandmaster" }[fam];
+      if (cap && wrank(p, fam, cap) > 0) m *= fam === "axe" ? 1.3 : 1.25;
+      return m;
+    } catch (e) { return 1; }
+  }
+  // Deep-art cross-tree inheritance: which spell / shallow-art trees an
+  // active art gains every unlocked rank of (one-way — the parent never
+  // gains from the art). Spell entries name the TOP of the chain; the art
+  // gains the whole lineage via spellLineage.
+  function techSpellInherit(techId) {
+    try { const v = window.CFG && window.CFG.TECH_SPELL_INHERIT && window.CFG.TECH_SPELL_INHERIT[techId]; return Array.isArray(v) ? v.slice() : []; } catch (e) { return []; }
+  }
+  function techShallowInherit(techId) {
+    try { const v = window.CFG && window.CFG.TECH_SHALLOW_INHERIT && window.CFG.TECH_SHALLOW_INHERIT[techId]; return Array.isArray(v) ? v.slice() : []; } catch (e) { return []; }
+  }
+  // Summed ranks across a deep art's own tree + its spell lineage (union,
+  // so Glacier + Frostbite never double-counts) + its shallow-art trees.
+  // Mastery ORs: any mastered tree in the web counts as mastered.
+  function effectiveTechPerks(caster, abId) {
+    try {
+      if (!caster || caster.kind !== "player" || !caster.spellPerks) return { potency: 0, efficiency: 0, mastery: 0, surge: 0 };
+      const own = caster.spellPerks[abId] || {};
+      let pot = (own.potency | 0), eff = (own.efficiency | 0), sur = (own.surge | 0), mas = ((own.mastery | 0) > 0) ? 1 : 0;
+      const seen = {};
+      seen[abId] = true;
+      try {
+        for (const top of techSpellInherit(abId)) {
+          for (const lid of spellLineage(top)) {
+            if (seen[lid]) continue;
+            seen[lid] = true;
+            const q = caster.spellPerks[lid] || {};
+            pot += (q.potency | 0); eff += (q.efficiency | 0); sur += (q.surge | 0);
+            if ((q.mastery | 0) > 0) mas = 1;
+          }
+        }
+      } catch (e2) { }
+      try {
+        for (const sid of techShallowInherit(abId)) {
+          if (seen[sid]) continue;
+          seen[sid] = true;
+          const q = caster.spellPerks[sid] || {};
+          pot += (q.potency | 0); eff += (q.efficiency | 0); sur += (q.surge | 0);
+          if ((q.mastery | 0) > 0) mas = 1;
+        }
+      } catch (e3) { }
+      return { potency: pot, efficiency: eff, mastery: mas, surge: sur };
+    } catch (e) { return { potency: 0, efficiency: 0, mastery: 0, surge: 0 }; }
+  }
   function techWeaponScale(caster, techId) {
     try {
-      const fam = techWeaponFam(techId);
-      if (!fam || !caster) return 1;
-      try { if (wieldedFamily(caster) !== fam) return 1; } catch (e) { return 1; }
+      const fams = techWeaponFams(techId);
+      if (!fams.length || !caster) return 1;
+      let wield = null;
+      try { wield = wieldedFamily(caster); } catch (e) { return 1; }
+      if (fams.indexOf(wield) < 0) return 1;
+      // every listed weapon tree sharpens the art at once (Faux Chop gains
+      // axe + sword + dagger ranks together); tier still rides the wielded steel.
       let m = 1;
-      try { m *= weaponBaseMult(caster) || 1; } catch (e) { }
+      try { for (const f of fams) m *= weaponBaseMultFor(caster, f) || 1; } catch (e) { }
       try {
         const w = window.Items && window.Items.equippedWeapon ? window.Items.equippedWeapon(caster) : null;
         if (fam === "bow") {
@@ -1769,8 +2405,16 @@ window.Entities = (() => {
     } catch (e) { return 1; }
   }
   function getPerks(caster, abId) {
-    // Spell tiers inherit previous tiers (summed); techniques use own ranks only.
+    // Spell tiers inherit previous tiers (summed); deep arts with
+    // cross-tree links also gain their spell + shallow-art trees.
     try { if (spellParent(abId)) return effectiveSpellPerks(caster, abId); } catch (e) { }
+    try {
+      if (caster && caster.kind === "player") {
+        const si = (window.CFG && window.CFG.TECH_SPELL_INHERIT && window.CFG.TECH_SPELL_INHERIT[abId]) || [];
+        const hi = (window.CFG && window.CFG.TECH_SHALLOW_INHERIT && window.CFG.TECH_SHALLOW_INHERIT[abId]) || [];
+        if ((Array.isArray(si) && si.length) || (Array.isArray(hi) && hi.length)) return effectiveTechPerks(caster, abId);
+      }
+    } catch (e) { }
     if (!caster || caster.kind !== "player" || !caster.spellPerks) return { potency: 0, efficiency: 0, mastery: 0, surge: 0 };
     const q = caster.spellPerks[abId] || {};
     return {
@@ -1845,6 +2489,7 @@ window.Entities = (() => {
       if (!p || p.kind !== "player" || !p.stats) return 0;
       let b = endOver(p) * 0.25;
       try { b += kasayaRegenBonus(p) || 0; } catch (e) { }
+      try { b += kasayaItemRegen(p) || 0; } catch (e) { }
       return b;
     } catch (e) { return 0; }
   }
@@ -1870,6 +2515,7 @@ window.Entities = (() => {
       let b = intOver(p) * 0.25;
       try { b += robeRegenBonus(p) || 0; } catch (e) { }
       try { b += habitusRegenBonus(p) || 0; } catch (e) { }
+      try { b += habitusItemRegen(p) || 0; } catch (e) { }
       return b;
     } catch (e) { return 0; }
   }
@@ -1898,7 +2544,7 @@ window.Entities = (() => {
     // weapon techniques + melee ride Strength; pure spells ride Intellect
     // (+1%/pt via magicDmgMult) — the exact mirror of meleeDmgMult.
     let tech = false;
-    try { tech = !!(window.CFG && window.CFG.ABILITIES[abId] && window.CFG.ABILITIES[abId].kind === "technique"); } catch (e) { }
+    try { const k = window.CFG && window.CFG.ABILITIES[abId] && window.CFG.ABILITIES[abId].kind; tech = (k === "technique" || k === "shallow"); } catch (e) { }
     if (caster && caster.kind === "player" && caster.stats) {
       if (PHYSICAL.has(abId) || tech) m *= meleeDmgMult(caster);
       else m *= magicDmgMult(caster);
@@ -1958,6 +2604,33 @@ window.Entities = (() => {
     if (!r) return 0;
     return Math.max(1, Math.round(r.cost * 1.5));
   }
+  // Shallow arts pay a little of BOTH: listed MP (discounted like a spell)
+  // plus listed stamina (discounted by Efficiency, min 1 each).
+  function shallowBase(caster, abId) {
+    try {
+      const ab = (window.CFG && window.CFG.ABILITIES && window.CFG.ABILITIES[abId]) || null;
+      if (!ab || ab.kind !== "shallow") return null;
+      const q = getPerks(caster, abId);
+      const effM = 1 - 0.1 * (q.efficiency | 0);
+      let mp = Math.max(0, (ab.mp | 0) || 0) * effM;
+      let st = Math.max(0, (ab.st | 0) || 0) * effM;
+      try { if (wieldedFamily(caster) === "wand") mp *= wandCostMult(caster); } catch (e) { }
+      try { if (window.Items && window.Items.wandManaMult) mp *= window.Items.wandManaMult(caster, abId); } catch (e) { }
+      return { ab, mp, st };
+    } catch (e) { return null; }
+  }
+  function effectiveShallowMpCost(caster, abId) {
+    const r = shallowBase(caster, abId);
+    if (!r) return 0;
+    if (!(r.mp > 0)) return 0;
+    return Math.max(1, Math.round(r.mp));
+  }
+  function effectiveShallowStamCost(caster, abId) {
+    const r = shallowBase(caster, abId);
+    if (!r) return 0;
+    if (!(r.st > 0)) return 0;
+    return Math.max(1, Math.round(r.st));
+  }
   // ---- shared one-liners: one formula, one place ----
   // Hit finishing: mitigation + variance + minimum 1. strikeDmg,
   // abilityDmg and the game.js shot vehicles all end here.
@@ -2009,7 +2682,7 @@ window.Entities = (() => {
     let isMagic = false;
     try {
       let tech3 = false;
-      try { tech3 = !!(window.CFG && window.CFG.ABILITIES[abId] && window.CFG.ABILITIES[abId].kind === "technique"); } catch (e3) { }
+      try { const k3 = window.CFG && window.CFG.ABILITIES[abId] && window.CFG.ABILITIES[abId].kind; tech3 = (k3 === "technique" || k3 === "shallow"); } catch (e3) { }
       isMagic = !PHYSICAL.has(abId) && !tech3;
     } catch (e) { isMagic = false; }
     let base = isMagic ? (caster.matk != null ? caster.matk : caster.atk) : caster.atk;
@@ -2027,7 +2700,7 @@ window.Entities = (() => {
     let tdef = 0;
     try {
       let tech2 = false;
-      try { tech2 = !!(window.CFG && window.CFG.ABILITIES[abId] && window.CFG.ABILITIES[abId].kind === "technique"); } catch (e2) { }
+      try { const k2 = window.CFG && window.CFG.ABILITIES[abId] && window.CFG.ABILITIES[abId].kind; tech2 = (k2 === "technique" || k2 === "shallow"); } catch (e2) { }
       if (PHYSICAL.has(abId) || tech2) tdef = (target && target.def) || 0;
       else tdef = (target && (target.sdef != null ? target.sdef : target.def)) || 0;
     } catch (e) { tdef = (target && target.def) || 0; }
@@ -2282,6 +2955,7 @@ window.Entities = (() => {
       if (treeId === "parry") return "parry";
       if (treeId === "shield") return "shield";
       const T = (window.CFG && window.CFG.TECHNIQUES) || {};
+      if (T[treeId] && T[treeId].active && T[treeId].shallow) return "shallow";
       if (T[treeId] && T[treeId].active) return "technique";
       const def = skillTreeDef(treeId);
       if (!def) return null;
@@ -2882,6 +3556,18 @@ window.Entities = (() => {
       return 0.15 * (wrank(p, "kasaya", "enduring") | 0);
     } catch (e) { return 0; }
   }
+  // Worn-wrap item regen: kasaya weave returns stamina flat per tier,
+  // scaling with the copy's bench-work exactly like pool stats.
+  function kasayaItemRegen(p) {
+    try {
+      if (!p || p.kind !== "player" || armorWornClass(p) !== "kasaya") return 0;
+      const it = p.equipment && p.equipment.armor && window.Items && window.Items.ITEMS[p.equipment.armor];
+      if (!it || !it.bonus || !it.bonus.stRegen) return 0;
+      let m = 1;
+      try { m = window.Items.gearSlotMult(p, "armor") || 1; } catch (e) { }
+      return it.bonus.stRegen * m;
+    } catch (e) { return 0; }
+  }
   // ---- Choir tunics: Devotion (habitus) ----
   // Prayer Weave + Seraph Voice deepen MATK; Empowered Prayer (+ the
   // capstone) blesses every spell. Litany lengthens the MP pool, Clarity
@@ -2910,6 +3596,18 @@ window.Entities = (() => {
     try {
       if (!p || p.kind !== "player" || armorWornClass(p) !== "habitus") return 0;
       return 0.15 * (wrank(p, "habitus", "clarity") | 0);
+    } catch (e) { return 0; }
+  }
+  // Worn-tunic item regen: habitus weave returns MP flat per tier,
+  // scaling with the copy's bench-work exactly like pool stats.
+  function habitusItemRegen(p) {
+    try {
+      if (!p || p.kind !== "player" || armorWornClass(p) !== "habitus") return 0;
+      const it = p.equipment && p.equipment.armor && window.Items && window.Items.ITEMS[p.equipment.armor];
+      if (!it || !it.bonus || !it.bonus.mpRegen) return 0;
+      let m = 1;
+      try { m = window.Items.gearSlotMult(p, "armor") || 1; } catch (e) { }
+      return it.bonus.mpRegen * m;
     } catch (e) { return 0; }
   }
   // One landed direct blow BY the hero feeds the worn shell's tree. Called
@@ -3180,10 +3878,10 @@ window.Entities = (() => {
       return {
         maxHp: mobScaledStat(T.hp | 0, g.hp, lf, g.hpCap),
         maxMp: mp,
-        atk: mobScaledStat(T.atk | 0, g.atk, lf, g.atkCap),
-        matk: mobScaledStat(T.atk | 0, g.matk, lf, g.matkCap != null ? g.matkCap : g.atkCap),
-        def: mobScaledStat(T.def | 0, g.def, lf, g.defCap != null ? g.defCap : g.atkCap),
-        sdef: mobScaledStat(T.def | 0, g.sdef, lf, g.sdefCap != null ? g.sdefCap : g.atkCap),
+       atk: mobScaledStat(T.atk | 0, g.atk, lf, g.atkCap),
+        matk: mobScaledStat((T.matk != null ? T.matk : T.atk) | 0, g.matk, lf, g.matkCap != null ? g.matkCap : g.atkCap),
+       def: mobScaledStat(T.def | 0, g.def, lf, g.defCap != null ? g.defCap : g.atkCap),
+        sdef: mobScaledStat((T.sdef != null ? T.sdef : T.def) | 0, g.sdef, lf, g.sdefCap != null ? g.sdefCap : g.atkCap),
         spd: Math.round((((T.spd != null ? T.spd : 3)) + Math.min(g.spdCap, g.spdRate * n * (1 + n / 60))) * 10) / 10,
       };
     } catch (e) { return null; }
@@ -3632,14 +4330,14 @@ window.Entities = (() => {
   }
   return {
     makePlayer, makeNpcStatBlock, roleMult, makeMob, mobGrowth, mobArchetype, mobLevelFactor, gainXp, xpFor, abilityDmg, abilityUnlockFor, baseStats,
-    bossMagicTier, movepoolFor,
+    bossMagicTier, movepoolFor, mobSpellMaxTier, isSpellcasterKind, martialShallowsFor, martialTechsFor, bossShallowsFor, shallowIdsAll, isAngelRole, isCivDemonRole, npcStyleFor, npcSpellMaxTier, npcBonusSpells, npcArtFor, ensureAngelPower, augmentNpcKit, npcWeaponFamOf,
     mobGearTierFor, mobWarBand, mobWarTier, mobArmorTrack, mobArmorIdForTier, fitMobArmor, gearIdForFamTier, mobTechniqueFams, mobTechniqueGear, equipMobTechniqueGear, equipMobWarGear,
     ensureProgression, migratePlayer, recalcDerived, defaultStats, defaultHotbar, equipBonuses,
     maxStaminaFor,
     raceBonus, syncRace,
-    getPerks, getOwnPerks, hasMastery, spellPowerMult, effectiveMpCost, effectiveStamCost, effectiveCooldown, strikeDmg,
+    getPerks, getOwnPerks, hasMastery, spellPowerMult, effectiveMpCost, effectiveStamCost, effectiveShallowMpCost, effectiveShallowStamCost, effectiveCooldown, strikeDmg,
     finishHit, wantMpFor, supportRefund,
-    techWeaponFam, techWeaponName, techWeaponScale, shadowCloneStats, spellParent, spellAncestors, spellLineage, spellLineageLabel, effectiveSpellPerks, spellChannelTime,
+    techWeaponFam, techWeaponFams, techWeaponName, techWeaponScale, weaponBaseMultFor, techSpellInherit, techShallowInherit, effectiveTechPerks, shadowCloneStats, spellParent, spellAncestors, spellLineage, spellLineageLabel, effectiveSpellPerks, spellChannelTime,
     meleeDmgMult, flurryDmgMult, staminaRegenMult, hpRegenMult, mpRegenMult, staminaRegenBonus, hpRegenBonus, mpRegenBonus, agiCdMult,
     magicDmgMult, spellFlatBonus, spellCostMult, strOver, intOver, lukOver, agiOver, endOver, forOver,
     dodgeChance, critChance, critMult, loyaltyMult, loyaltyPts, giftCost, npcHealCost,
@@ -3653,8 +4351,8 @@ window.Entities = (() => {
     treePoints, treePointsCap, treeCapped, treeProgress, unspentSkillPoints, noteTreeUse, noteArmorHit,
     armorWornClass, armorDefBonus, armorHpBonus, armorResistBonus, armorRegenBonus,
     robeSdefBonus, robeMatkBonus, robeMpBonus, robeResistBonus, robeRegenBonus,
-    kasayaAtkBonus, kasayaPhysMult, kasayaStaminaBonus, kasayaRegenBonus,
-    habitusMatkBonus, habitusSpellMult, habitusMpBonus, habitusRegenBonus,
+    kasayaAtkBonus, kasayaPhysMult, kasayaStaminaBonus, kasayaRegenBonus, kasayaItemRegen,
+    habitusMatkBonus, habitusSpellMult, habitusMpBonus, habitusRegenBonus, habitusItemRegen,
     noteStrikeHit,
     lifetimeTames, lifetimeInsectTames,
     weaponBaseMult, weaponMeleeMult, weaponCritBonus, weaponCritPoison, weaponDefBonus,

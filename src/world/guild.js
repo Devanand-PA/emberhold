@@ -665,6 +665,7 @@ window.Guild = (() => {
           const ox = (Math.random() * 8 - 4), oy = (Math.random() * 8 - 4);
           m.x = cx + ox; m.y = cy + oy; m.homeX = m.x; m.homeY = m.y;
           m.hp = m.maxHp; m.mp = m.maxMp;
+          m.questGuild = q.gid;
           m.questInfest = q.gid;
           G.mobs.push(m); n++;
         } catch (e) {}
@@ -1418,13 +1419,57 @@ window.Guild = (() => {
   }
   // Proximity top-up: hunting grounds are real habitat, but the wilds don't
   // guarantee the contracted kind is standing there when the hero arrives
-  // (house infestations also wander off / get cleared before arrival). Like
-  // the villager-quest spawner, mint creditable mobs near the grounds while
-  // the hero closes in — bounded by the remaining need so it never farms.
+  // (house infestations also wander off / get cleared before arrival — by
+  // guards, infighting mobs, or other players). Mints against the REMAINING
+  // need with no lifetime cap, so third-party kills can never soft-lock a
+  // contract: as long as the hunt is short, fresh marks keep arriving. The
+  // deficit bound (never more live than the need) means it can't be farmed.
+  // Ecological substitutes (daylight goblins standing in for undead, etc.)
+  function topUpKindFor(wantKind, isFetch, gx, gy) {
+    let kind = wantKind, qtag = null;
+    if (!isFetch) {
+      try {
+        let dark = false;
+        try { dark = window.Game.isDarkAt(gx, gy); } catch (e2) { dark = !!window.Game.isNight && window.Game.isNight(); }
+        let isUndead = (kind === "skeleton" || kind === "wraith");
+        try { if (!isUndead && window.Items && window.Items.isUndead) isUndead = !!window.Items.isUndead({ kind }); } catch (e3) {}
+        if (isUndead && !dark) { kind = "goblin"; qtag = wantKind; }
+        else if (kind === "wolf") {
+          let b = null;
+          try { b = window.World.biomeAt(Math.round(gx), Math.round(gy)); } catch (e4) {}
+          if (b !== "forest") { kind = "goblin"; qtag = wantKind; }
+        }
+      } catch (e) {}
+    }
+    return { kind, qtag };
+  }
+  // Place one creditable contract mob around (gx,gy). tags: {gid, qtag,
+  // infest, fetch} — the holder's onKill/loot hooks key off questGuild (+
+  // questKind substitute / questFetch goods), so sim-minted bodies for OTHER
+  // players' contracts credit them too.
+  function placeTopUpMob(kind, lv, gx, gy, rr, tags) {
+    try {
+      const G = window.Game && window.Game.G;
+      if (!G || !Array.isArray(G.mobs)) return null;
+      try { if (!((window.CFG && window.CFG.MOB_TEMPLATES || {})[kind])) return null; } catch (e) { return null; }
+      const m = window.Entities.makeMob(kind, lv, 60, 0);
+      if (!m) return null;
+      const ang = Math.random() * Math.PI * 2, rad = 3 + Math.random() * rr;
+      let mx = gx + Math.cos(ang) * rad, my = gy + Math.sin(ang) * rad;
+      try { if (window.Game.walkable && !window.Game.walkable(mx, my)) { mx = gx; my = gy; } } catch (e) {}
+      m.x = mx; m.y = my; m.homeX = mx; m.homeY = my;
+      m.hp = m.maxHp; m.mp = m.maxMp;
+      if (tags && tags.gid) m.questGuild = tags.gid;
+      if (tags && tags.qtag) m.questKind = tags.qtag;
+      if (tags && tags.infest) m.questInfest = tags.gid;
+      if (tags && tags.fetch) m.questFetch = tags.fetch;
+      G.mobs.push(m);
+      return m;
+    } catch (e) { return null; }
+  }
   function topUpContracts() {
     try {
       const p = P(); if (!p || p.hp <= 0 || p.inDungeon) return;
-      const g = ensure(p); if (!g || !g.active.length) return;
       const G = window.Game && window.Game.G;
       if (!G || !Array.isArray(G.mobs)) return;
       // multiplayer thin client: only a simulator mints (mirrors Quests.tick)
@@ -1433,6 +1478,12 @@ window.Guild = (() => {
           if (!(window.MP.amAreaSim && window.MP.amAreaSim())) return;
         }
       } catch (e) {}
+      // multiplayer: stock other players' contract grounds too (their thin
+      // clients never mint — locally minted mobs would be unkillable ghosts).
+      // Runs even with no local contracts: a sim with an empty board still
+      // stocks fresh requesters' grounds.
+      try { topUpRemoteNeeds(); } catch (e) {}
+      const g = ensure(p); if (!g || !g.active.length) return;
       for (const q of g.active) {
         if (!q || q.status !== "active") continue;
         if (q.kind !== "kill" && q.kind !== "clear" && q.kind !== "fetch") continue;
@@ -1452,19 +1503,22 @@ window.Guild = (() => {
         } else {
           if ((q.have | 0) >= (q.need | 0)) { q.status = "turnin"; continue; }
         }
-        if ((q.spawned | 0) > (q.need | 0) + 6) continue;
         const t = q.target;
         if (!t || !isFinite(t.gx) || !isFinite(t.gy)) continue;
         if (Math.hypot(t.gx - p.x, t.gy - p.y) > 30) continue;
         const wantKind = q.kind === "fetch" ? q.fetchMob : q.mobKind;
+        if (!wantKind) continue; // malformed contract: nothing creditable to mint
         let alive = 0;
         try {
           for (const m of G.mobs) {
             if (!m || !(m.hp > 0) || m.corpse) continue;
-            if (m.questGuild === q.gid) { alive++; continue; }
-            if (m.kind !== wantKind) continue;
             const mx = (m.x != null ? m.x : m.gx), my = (m.y != null ? m.y : m.gy);
-            if (isFinite(mx) && isFinite(my) && nearTarget(q, mx, my)) alive++;
+            if (!isFinite(mx) || !isFinite(my)) continue;
+            // tagged marks only count while they hold the grounds — a chased-off
+            // mark is unkillable-for-credit, so it must not block restock
+            if (m.questGuild === q.gid) { if (nearTarget(q, mx, my)) alive++; continue; }
+            if (m.kind !== wantKind) continue;
+            if (nearTarget(q, mx, my)) alive++;
           }
         } catch (e) {}
         const haveN = q.kind === "fetch" ? (fetchHave(p, q) | 0) : (q.have | 0);
@@ -1474,42 +1528,150 @@ window.Guild = (() => {
         // gloom, wolves only in forests — substitutes still credit the hunt
         // via their questKind + questGuild tags (see onKill above). Fetch
         // contracts always mint the REAL kind: the corpse must drop the goods.
-        let kind = wantKind, qtag = null;
-        if (q.kind !== "fetch") {
-          try {
-            let dark = false;
-            try { dark = window.Game.isDarkAt(t.gx, t.gy); } catch (e2) { dark = !!window.Game.isNight && window.Game.isNight(); }
-            let isUndead = (kind === "skeleton" || kind === "wraith");
-            try { if (!isUndead && window.Items && window.Items.isUndead) isUndead = !!window.Items.isUndead({ kind }); } catch (e3) {}
-            if (isUndead && !dark) { kind = "goblin"; qtag = wantKind; }
-            else if (kind === "wolf") {
-              let b = null;
-              try { b = window.World.biomeAt(Math.round(t.gx), Math.round(t.gy)); } catch (e4) {}
-              if (b !== "forest") { kind = "goblin"; qtag = wantKind; }
-            }
-          } catch (e) {}
-        }
+        const sub = topUpKindFor(wantKind, q.kind === "fetch", t.gx, t.gy);
         let lv = 5;
         try { lv = window.Game.overworldLevelFor(t.gx, t.gy); } catch (e) { try { lv = (p && p.lv) || 5; } catch (e2) {} }
         lv = Math.max(1, Math.min(60, Math.round(lv)));
         const rr = q.kind === "clear" ? 6 : 10;
         const n = Math.min(remaining, 3);
+        let placed = 0;
         for (let i = 0; i < n; i++) {
           try {
-            const m = window.Entities.makeMob(kind, lv, 60, 0);
-            const ang = Math.random() * Math.PI * 2, rad = 3 + Math.random() * rr;
-            let mx = t.gx + Math.cos(ang) * rad, my = t.gy + Math.sin(ang) * rad;
-            try { if (window.Game.walkable && !window.Game.walkable(mx, my)) { mx = t.gx; my = t.gy; } } catch (e) {}
-            m.x = mx; m.y = my; m.homeX = mx; m.homeY = my;
-            m.hp = m.maxHp; m.mp = m.maxMp;
-            m.questGuild = q.gid;
-            if (qtag) m.questKind = qtag;
-            if (q.kind === "clear") m.questInfest = q.gid;
-            if (q.kind === "fetch" && q.itemId) m.questFetch = q.itemId;
-            G.mobs.push(m);
+            const m = placeTopUpMob(sub.kind, lv, t.gx, t.gy, rr, { gid: q.gid, qtag: sub.qtag, infest: q.kind === "clear", fetch: (q.kind === "fetch" && q.itemId) ? q.itemId : null });
+            if (m) placed++;
           } catch (e) {}
         }
-        q.spawned = (q.spawned | 0) + n;
+        q.spawned = (q.spawned | 0) + placed;
+      }
+    } catch (e) {}
+  }
+  // ---------- multiplayer contract restock ----------
+  // A thin client never mints (locally minted mobs would be unkillable ghosts
+  // the sim drops intents for), so every player publishes their shortfalls and
+  // the SIMULATOR stocks every fresh requester's grounds exactly like its own:
+  // untagged bodies for kill/clear (kind + proximity credit the holder), the
+  // holder's gid (+questFetch goods) for fetch. Deficit-bounded per need, so
+  // overlapping sims converge instead of doubling.
+  const _remoteNeeds = new Map(); // hash -> {at, needs:[...]}
+  let _needPubAt = 0;
+  function onMpQuestNeed(fromHash, needs) {
+    try {
+      const h = String(fromHash || "").toLowerCase();
+      if (!h) return;
+      if (!Array.isArray(needs) || !needs.length) { _remoteNeeds.delete(h); return; }
+      const clean = [];
+      for (const w of needs) {
+        if (!w || typeof w !== "object") continue;
+        if (clean.length >= MAX_ACTIVE) break;
+        const k = (w.kind === "clear" || w.kind === "fetch") ? w.kind : "kill";
+        const mk = String(w.mobKind || "").slice(0, 24);
+        try { if (!((window.CFG && window.CFG.MOB_TEMPLATES || {})[mk])) continue; } catch (e) { continue; }
+        const rem = Math.max(1, Math.min(9, w.need | 0 || 0));
+        if (!(rem > 0)) continue;
+        const gx = +w.gx, gy = +w.gy;
+        if (!isFinite(gx) || !isFinite(gy) || Math.abs(gx) > 2000 || Math.abs(gy) > 2000) continue;
+        const px = +w.px, py = +w.py;
+        if (!isFinite(px) || !isFinite(py) || Math.abs(px) > 2000 || Math.abs(py) > 2000) continue;
+        clean.push({
+          kind: k, mobKind: mk, need: rem, gx, gy,
+          r: Math.max(4, Math.min(80, +w.r || TARGET_RADIUS)),
+          px, py, dim: (w.dim === "hell" || w.dim === "heaven") ? w.dim : "surf",
+          gid: String(w.gid || "").slice(0, 48) || null,
+          itemId: (k === "fetch" && w.itemId) ? String(w.itemId).slice(0, 40) : null,
+        });
+      }
+      if (clean.length) _remoteNeeds.set(h, { at: Date.now(), needs: clean });
+      else _remoteNeeds.delete(h);
+    } catch (e) {}
+  }
+  function publishQuestNeeds() {
+    try {
+      if (!window.MP || !window.MP.M || !window.MP.M.active) return;
+      const p = P(); if (!p || p.hp <= 0 || p.inDungeon) return;
+      const now = Date.now();
+      if (now - (_needPubAt || 0) < 15000) return;
+      _needPubAt = now;
+      const g = ensure(p); if (!g || !g.active.length) { _remoteNeeds.clear(); return; }
+      let dim = "surf";
+      try { dim = (p.dim === "hell" || p.dim === "heaven") ? p.dim : "surf"; } catch (e) {}
+      const out = [];
+      for (const q of g.active) {
+        if (!q || q.status !== "active") continue;
+        if (q.kind !== "kill" && q.kind !== "clear" && q.kind !== "fetch") continue;
+        const t = q.target;
+        if (!t || !isFinite(t.gx) || !isFinite(t.gy)) continue;
+        let rem = 0, mk = null;
+        if (q.kind === "fetch") {
+          if (!q.fetchMob) continue;
+          if ((fetchHave(p, q) | 0) >= (q.need | 0)) continue;
+          rem = (q.need | 0) - (fetchHave(p, q) | 0); mk = q.fetchMob;
+        } else {
+          if ((q.have | 0) >= (q.need | 0)) continue;
+          rem = (q.need | 0) - (q.have | 0); mk = q.mobKind;
+        }
+        if (!(rem > 0) || !mk) continue;
+        out.push({ kind: q.kind, mobKind: mk, need: rem, gx: t.gx, gy: t.gy, r: (isFinite(t.r) ? t.r : TARGET_RADIUS), px: p.x, py: p.y, dim, gid: q.gid, itemId: q.itemId || null });
+        if (out.length >= MAX_ACTIVE) break;
+      }
+      if (!out.length) return;
+      try { mpBroadcast({ t: "guildQuestNeed", needs: out }); } catch (e) {}
+    } catch (e) {}
+  }
+  function topUpRemoteNeeds() {
+    try {
+      if (_remoteNeeds.size === 0) return;
+      const p = P(); if (!p) return;
+      const G = window.Game && window.Game.G;
+      if (!G || !Array.isArray(G.mobs)) return;
+      let myDim = "surf";
+      try { myDim = (p.dim === "hell" || p.dim === "heaven") ? p.dim : "surf"; } catch (e) {}
+      let me = "";
+      try { me = String(window.MP && window.MP.M && window.MP.M.hash || "").toLowerCase(); } catch (e) {}
+      // fallback sims (host quiet) only publish ~34 tiles around themselves,
+      // so they stock only nearby grounds — farther mints would never reach
+      // any screen. The host streams every viewer bubble, so it needs no gate.
+      let amHost = true;
+      try { if (window.MP && window.MP.M && window.MP.M.active && typeof window.MP.isHost === "function" && !window.MP.isHost()) amHost = false; } catch (e) {}
+      const now = Date.now();
+      for (const [h, rec] of _remoteNeeds) {
+        try {
+          if (!rec || !Array.isArray(rec.needs)) { _remoteNeeds.delete(h); continue; }
+          if (now - (rec.at || 0) > 45000) { _remoteNeeds.delete(h); continue; }
+          if (me && h === me) continue; // own contracts handled above
+          for (const w of rec.needs) {
+            try {
+              if (!w || w.dim !== myDim) continue;
+              // stock while the requester closes in (mirrors the 30-tile own
+              // rule — also keeps minted marks inside the 46-tile snapshot
+              // bubble and the 42-tile shadow radius, so they show up on the
+              // requester's screen instead of minting invisibly far away)
+              if (Math.hypot(w.gx - w.px, w.gy - w.py) > 30) continue;
+              if (!amHost && Math.hypot(w.gx - p.x, w.gy - p.y) > 30) continue;
+              const fauxQ = { target: { gx: w.gx, gy: w.gy, r: w.r }, kind: w.kind };
+              let alive = 0;
+              for (const m of G.mobs) {
+                if (!m || !(m.hp > 0) || m.corpse) continue;
+                const mx = (m.x != null ? m.x : m.gx), my = (m.y != null ? m.y : m.gy);
+                if (!isFinite(mx) || !isFinite(my)) continue;
+                if (!nearTarget(fauxQ, mx, my)) continue;
+                if (w.gid && m.questGuild === w.gid) { alive++; continue; }
+                if (w.kind === "fetch") continue; // fetch counts only its tagged carriers
+                if (m.kind === w.mobKind || (m.questKind != null && m.questKind === w.mobKind)) alive++;
+              }
+              const deficit = (w.need | 0) - alive;
+              if (deficit <= 0) continue;
+              const sub = topUpKindFor(w.mobKind, w.kind === "fetch", w.gx, w.gy);
+              let lv = 5;
+              try { lv = window.Game.overworldLevelFor(w.gx, w.gy); } catch (e) { try { lv = (p && p.lv) || 5; } catch (e2) {} }
+              lv = Math.max(1, Math.min(60, Math.round(lv)));
+              const rr = w.kind === "clear" ? 6 : 10;
+              const n = Math.min(deficit, 3);
+              for (let i = 0; i < n; i++) {
+                try { placeTopUpMob(sub.kind, lv, w.gx, w.gy, rr, { gid: w.gid, qtag: sub.qtag, infest: w.kind === "clear", fetch: (w.kind === "fetch" && w.itemId) ? w.itemId : null }); } catch (e) {}
+              }
+            } catch (e) {}
+          }
+        } catch (e) {}
       }
     } catch (e) {}
   }
@@ -1523,8 +1685,11 @@ window.Guild = (() => {
       const G = window.Game && window.Game.G;
       if (!G || p.hp <= 0) return;
       // contract grounds restock while the hero closes in (runs even with no
-      // open commissions — it is not part of the claimant drive below)
+      // open commissions — it is not part of the claimant drive below).
+      // Thin clients publish their shortfalls instead of minting: the
+      // simulator stocks every fresh requester's grounds (see topUpRemoteNeeds)
       try { topUpContracts(); } catch (e) {}
+      try { publishQuestNeeds(); } catch (e) {}
       // prune stale claims
       try {
         const now = Date.now();
@@ -1663,6 +1828,70 @@ window.Guild = (() => {
     } catch (e) {}
   }
 
+  // ---------- ally contract sharing ----------
+  // An ally shares one of their contracts; the recipient gets their OWN copy
+  // (fresh progress, new gid, own level-scaled reward) on the same grounds.
+  // Commissioned copies are never shareable — first-finisher-wins work is
+  // already shared. Progress flows through the normal hooks (topUp restock,
+  // onKill/kcredit, fetch loot) on both screens.
+  const SHARE_KINDS = { kill: 1, clear: 1, fetch: 1 };
+  function acceptSharedContract(sq, sharerName) {
+    try {
+      const p = P(); const g = ensure(p);
+      if (!g || !sq || sq.sys !== "g") return { ok: false, msg: "Bad share." };
+      if (g.active.length >= MAX_ACTIVE) return { ok: false, msg: `Your contract satchel is full (${MAX_ACTIVE}). Turn one in first.` };
+      const kind = sq.kind;
+      if (!SHARE_KINDS[kind]) return { ok: false, msg: "That contract can't be shared yet." };
+      const need = Math.max(1, Math.min(9, Math.round(Number(sq.need) || 0) || 0));
+      if (!(need > 0)) return { ok: false, msg: "Bad share." };
+      let mobKind = null, itemId = null, fetchMob = null;
+      if (kind === "kill" || kind === "clear") {
+        mobKind = String(sq.mobKind || "goblin").slice(0, 24);
+        try { if (!((window.CFG && window.CFG.MOB_TEMPLATES || {})[mobKind])) mobKind = "goblin"; } catch (e) { mobKind = "goblin"; }
+      } else {
+        itemId = String(sq.itemId || "").slice(0, 40);
+        try { if (!itemId || !window.Items.ITEMS[itemId]) return { ok: false, msg: "Unknown goods — share refused." }; } catch (e) { return { ok: false, msg: "Bad share." }; }
+        fetchMob = String(sq.fetchMob || "").slice(0, 24) || null;
+        if (fetchMob) { try { if (!((window.CFG && window.CFG.MOB_TEMPLATES || {})[fetchMob])) fetchMob = null; } catch (e) { fetchMob = null; } }
+      }
+      const t = (sq.t && typeof sq.t === "object") ? sq.t : {};
+      const gx = Number(t.gx), gy = Number(t.gy);
+      if (!isFinite(gx) || !isFinite(gy) || Math.abs(gx) > 2000 || Math.abs(gy) > 2000) return { ok: false, msg: "Bad share." };
+      const r = Math.max(4, Math.min(80, isFinite(Number(t.r)) ? Number(t.r) : (kind === "clear" ? HOUSE_RADIUS : TARGET_RADIUS)));
+      try {
+        const dup = g.active.some(q => q && q.status === "active" && !q.commissionId && q.kind === kind &&
+          (kind === "fetch" ? q.itemId === itemId : q.mobKind === mobKind));
+        if (dup) return { ok: false, msg: "You already carry that contract." };
+      } catch (e) {}
+      const byName = String(sharerName || "An ally").slice(0, 24);
+      const reward = rewardFor(p, need, kind === "fetch" ? "fetch" : "kill", { mobKind: mobKind || fetchMob, itemId, minRank: 0 });
+      const q = {
+        gid: "gc" + (g.seq++), kind,
+        title: String(sq.title || "Shared contract").slice(0, 48),
+        desc: `Shared by ${byName}.` + (sq.desc ? " " + String(sq.desc).slice(0, 120) : ""),
+        need, have: 0, itemId, mobKind, reward,
+        boardId: "__shared", boardName: "Shared",
+        target: {
+          gx, gy, r,
+          placeName: t.placeName ? String(t.placeName).slice(0, 48) : null,
+          houseTitle: t.houseTitle ? String(t.houseTitle).slice(0, 48) : null,
+          biome: t.biome ? String(t.biome).slice(0, 24) : null,
+        },
+        fetchMob, srcHint: sq.srcHint ? String(sq.srcHint).slice(0, 140) : "",
+        minRank: 0, acceptedAt: Date.now(), status: "active", offerUid: null,
+        sharedBy: byName,
+      };
+      g.active.push(q);
+      if (q.kind === "clear") { try { spawnHouseInfestation(q); } catch (e) {} }
+      save();
+      try {
+        window.UI.toast(`🏛️ Shared contract accepted: ${q.title} — ${progressText(p, q)}`, 5000);
+        if (window.UI.renderGuild) window.UI.renderGuild();
+      } catch (e) {}
+      return { ok: true, quest: q };
+    } catch (e) { return { ok: false, msg: "Couldn't take it up." }; }
+  }
+
   return {
     RANKS, RANK_NEED, MAX_ACTIVE, BOARD_SIZE, BOARD_POOL, ROTATE_MS, TARGET_RADIUS, HOUSE_RADIUS, GUILD_KEYS,
     isGuildhallKey, isGuildBuilding, guildNexusPos, nearestGuild,
@@ -1672,6 +1901,7 @@ window.Guild = (() => {
     msToRotate, epochNow, findHuntingGround, findGatherGround, groundForFetchItem, biomesForMob, biomeLabel, mobName,
     commissions, openCommissions, doneCommissions, findCommission, createCommission, acceptCommission, collectCommission,
     commissionCostKill, commissionCostFetch, commissionReward, allItemIds, allMobIds, commissionDesc,
-    onMpClaim, onMpCommNew, onMpCommAccept, onMpCommDone, onMpCommSync, guildSyncSnapshot, releaseNpcClaims, tick,
+    onMpClaim, onMpCommNew, onMpCommAccept, onMpCommDone, onMpCommSync, onMpQuestNeed, guildSyncSnapshot, releaseNpcClaims, tick,
+    acceptSharedContract,
   };
 })();

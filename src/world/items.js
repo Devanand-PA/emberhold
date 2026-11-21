@@ -322,38 +322,43 @@ window.Items = (() => {
     ITEMS[r.id] = { name: r.name, icon: r.icon, type: "equipment", slot: "trinket", ringBoost: r.boost, bonus: {}, price: r.price, desc: `${r.desc} (worn ring)` };
   }
   // ---- armor: light/heavy cut physical, enchanted robes cut magical ----
-  // sdef is explicit magical defence (bonus.sdef) by tier: cloth/robes guard
-  // the mind, light leathers a little, heavy plate barely any.
+  // sdef is explicit magical defence (bonus.sdef) by tier: robes guard the
+  // mind exactly as hard as plate guards the body — each robe's SDEF equals
+  // the same-band plate's DEF (mage=iron, archmage=steel, holy=mythril,
+  // wyrmshroud=dragonbone, void=oblivion, dawnshroud=dawnstone; cloth matches
+  // starter leather; the tide hybrid already sits at steel parity).
+  // Light leathers guard a little, heavy plate barely any (plate's own DEF
+  // still spills over against spells via the legacy rule in equipBonuses).
   const ARMORS = [
-    { id: "cloth_robe", name: "Cloth Robe", icon: "🥋", def: 6, hp: 0, mp: 30, sdef: 8, matk: 9, phys: 0.05, magic: 0.1, price: 90, desc: "+9 MATK, +6 DEF, +8 SDEF, +30 MP. Light wrap: 5% physical, 10% magical resist." },
-    { id: "leather_armor", name: "Leather Armor", icon: "🦺", def: 15, hp: 39, mp: 0, sdef: 6, phys: 0.12, magic: 0, price: 280, desc: "+15 DEF, +6 SDEF, +39 HP. Light: 12% physical resist." },
-    { id: "wayfarer_garb", name: "Wayfarer Garb", icon: "🧥", def: 30, hp: 105, mp: 60, sdef: 12, phys: 0.18, magic: 0.05, spd: 0.1, price: 950, desc: "+30 DEF, +12 SDEF, +105 HP, +60 MP. Light: 18% physical, 5% magical resist. +0.1 SPD." },
-    { id: "shadowweave_garb", name: "Shadowweave Garb", icon: "🥷", def: 60, hp: 225, mp: 0, sdef: 27, phys: 0.25, magic: 0.1, spd: 0.25, price: 4200, desc: "+60 DEF, +27 SDEF, +225 HP. Light: 25% physical, 10% magical. +0.25 SPD." },
-    { id: "iron_armor", name: "Iron Armor", icon: "🛡️", def: 27, hp: 83, mp: 0, sdef: 6, phys: 0.28, magic: 0, price: 650, desc: "+27 DEF, +6 SDEF, +83 HP. Heavy: 28% physical resist." },
-    { id: "steel_plate", name: "Steel Plate", icon: "🛡️", def: 48, hp: 180, mp: 0, sdef: 14, phys: 0.35, magic: 0, spd: -0.1, price: 2400, desc: "+48 DEF, +14 SDEF, +180 HP. Heavy: 35% physical resist. -0.1 SPD." },
-    { id: "mythril_plate", name: "Mythril Plate", icon: "🛡️", def: 83, hp: 330, mp: 0, sdef: 30, phys: 0.42, magic: 0.05, spd: -0.1, price: 6800, desc: "+83 DEF, +30 SDEF, +330 HP. Heavy: 42% physical, 5% magical. -0.1 SPD." },
-    { id: "dragonbone_plate", name: "Dragonbone Plate", icon: "🐲", def: 173, hp: 720, mp: 0, sdef: 54, phys: 0.5, magic: 0.1, spd: -0.2, price: 18500, desc: "+173 DEF, +54 SDEF, +720 HP. Heavy: 50% physical, 10% magical. -0.2 SPD." },
-    { id: "mage_robe", name: "Mage Robe", icon: "🧙", def: 15, hp: 0, mp: 150, sdef: 24, matk: 33, phys: 0, magic: 0.25, price: 550, desc: "+33 MATK, +15 DEF, +24 SDEF, +150 MP. Enchanted: 25% magical resist." },
-    { id: "archmage_robe", name: "Archmage Robe", icon: "🔮", def: 36, hp: 165, mp: 300, sdef: 42, matk: 83, phys: 0.05, magic: 0.35, price: 3900, desc: "+83 MATK, +36 DEF, +42 SDEF, +165 HP, +300 MP. Enchanted: 35% magical, 5% physical resist." },
-    { id: "holy_vestments", name: "Holy Vestments", icon: "😇", def: 39, hp: 195, mp: 390, sdef: 51, matk: 98, phys: 0.05, magic: 0.45, price: 8800, desc: "+98 MATK, +39 DEF, +51 SDEF, +195 HP, +390 MP. Enchanted: 45% magical resist. Blessed." },
-    { id: "wyrmshroud_robe", name: "Wyrmshroud Robe", icon: "🐲", def: 54, hp: 315, mp: 540, sdef: 84, matk: 143, phys: 0.08, magic: 0.45, price: 17500, desc: "+143 MATK, +54 DEF, +84 SDEF, +315 HP, +540 MP. Enchanted: 45% magical, 8% physical resist. Dragon-scale choir weave — the robe track's dragon tier." },
-    { id: "eclipse_garb", name: "Eclipse Garb", icon: "🌒", def: 135, hp: 630, mp: 300, sdef: 90, matk: 60, phys: 0.32, magic: 0.25, spd: 0.3, price: 26000, desc: "+60 MATK, +135 DEF, +90 SDEF, +630 HP, +300 MP. Light: 32% physical, 25% magical. +0.3 SPD. Stitched from warlord shadows." },
-    { id: "oblivion_plate", name: "Oblivion Plate", icon: "🌌", def: 300, hp: 1350, mp: 0, sdef: 105, phys: 0.55, magic: 0.15, spd: -0.2, price: 42000, desc: "+300 DEF, +105 SDEF, +1350 HP. Heavy: 55% physical, 15% magical resist. -0.2 SPD. Forged past the end of the world." },
-    { id: "void_mantle", name: "Void Mantle", icon: "🕳️", def: 90, hp: 480, mp: 900, sdef: 120, matk: 225, phys: 0.1, magic: 0.55, price: 40000, desc: "+225 MATK, +90 DEF, +120 SDEF, +480 HP, +900 MP. Enchanted: 55% magical, 10% physical resist. Wears the dark like a crown." },
-    { id: "dawnstone_plate", name: "Dawnstone Plate", icon: "🌟", def: 353, hp: 1650, mp: 0, sdef: 132, phys: 0.58, magic: 0.18, spd: -0.2, price: 48000, desc: "+353 DEF, +132 SDEF, +1650 HP. Heavy: 58% physical, 18% magical resist. -0.2 SPD. Wards the unholy: 30% less damage from undead and demons. Sunrise hammered into plate — heaven-boss prize." },
-    { id: "dawnshroud_robe", name: "Dawnshroud Robe", icon: "🌅", def: 108, hp: 600, mp: 1080, sdef: 143, matk: 270, phys: 0.12, magic: 0.58, price: 46000, desc: "+270 MATK, +108 DEF, +143 SDEF, +600 HP, +1080 MP. Enchanted: 58% magical, 12% physical resist. Wards the unholy: 30% less damage from undead and demons. Woven dawnlight — heaven-boss prize." },
-    { id: "patched_kasaya", name: "Patched Kasaya", icon: "🥻", atk: 9, def: 5, hp: 30, mp: 0, sdef: 6, phys: 0.05, magic: 0, price: 120, desc: "+9 ATK, +5 DEF, +6 SDEF, +30 HP. A mendicant's patched gi: 5% physical resist. Kasaya feed the Ascetic tree while worn." },
-    { id: "ironthread_kasaya", name: "Ironthread Kasaya", icon: "🥻", atk: 24, def: 12, hp: 90, mp: 0, sdef: 12, phys: 0.12, magic: 0, price: 900, desc: "+24 ATK, +12 DEF, +12 SDEF, +90 HP. Iron-threaded saffron: 12% physical resist. Kasaya feed the Ascetic tree while worn." },
-    { id: "sunsilk_kasaya", name: "Sunsilk Kasaya", icon: "🥻", atk: 51, def: 24, hp: 210, mp: 0, sdef: 21, phys: 0.2, magic: 0.05, price: 5200, desc: "+51 ATK, +24 DEF, +21 SDEF, +210 HP. Sun-bright weave: 20% physical, 5% magical resist. Kasaya feed the Ascetic tree while worn." },
-    { id: "dragonhide_kasaya", name: "Dragonhide Kasaya", icon: "🥻", atk: 90, def: 45, hp: 450, mp: 0, sdef: 36, phys: 0.3, magic: 0.08, price: 15000, desc: "+90 ATK, +45 DEF, +36 SDEF, +450 HP. Cured dragon hide over saffron: 30% physical, 8% magical resist. Kasaya feed the Ascetic tree while worn." },
-    { id: "novice_habit", name: "Novice Habit", icon: "🕯️", def: 6, hp: 0, mp: 60, sdef: 9, matk: 12, phys: 0, magic: 0.08, price: 130, desc: "+12 MATK, +6 DEF, +9 SDEF, +60 MP. A novice's dark tunic: 8% magical resist. Habitus feed the Devotion tree while worn." },
-    { id: "canon_habit", name: "Canon Habit", icon: "🕯️", def: 12, hp: 0, mp: 150, sdef: 21, matk: 30, phys: 0, magic: 0.18, price: 950, desc: "+30 MATK, +12 DEF, +21 SDEF, +150 MP. Oath-bound black: 18% magical resist. Habitus feed the Devotion tree while worn." },
-    { id: "vesper_habit", name: "Vesper Habit", icon: "🕯️", def: 21, hp: 0, mp: 300, sdef: 39, matk: 60, phys: 0, magic: 0.3, price: 5500, desc: "+60 MATK, +21 DEF, +39 SDEF, +300 MP. Evening-choir weave: 30% magical resist. Habitus feed the Devotion tree while worn." },
-    { id: "seraph_habit", name: "Seraph Habit", icon: "🕯️", def: 36, hp: 0, mp: 525, sdef: 66, matk: 113, phys: 0, magic: 0.4, price: 16000, desc: "+113 MATK, +36 DEF, +66 SDEF, +525 MP. White-fire vestment: 40% magical resist. Habitus feed the Devotion tree while worn." },
-    { id: "oblivion_kasaya", name: "Oblivion Kasaya", icon: "\u{1F30C}", atk: 158, def: 83, hp: 840, mp: 0, sdef: 68, phys: 0.35, magic: 0.1, price: 42000, desc: "+158 ATK, +83 DEF, +68 SDEF, +840 HP. Woven from the end of the world: 35% physical, 10% magical resist. Hell-only. Kasaya feed the Ascetic tree while worn." },
-    { id: "void_habit", name: "Void Habit", icon: "\u{1F56F}\uFE0F", def: 75, hp: 450, mp: 825, sdef: 113, matk: 195, phys: 0.08, magic: 0.5, price: 40000, desc: "+195 MATK, +75 DEF, +113 SDEF, +450 HP, +825 MP. Enchanted: 50% magical, 8% physical resist. Wears the dark like a crown. Hell-only. Habitus feed the Devotion tree while worn." },
-    { id: "dawnsilk_kasaya", name: "Dawnsilk Kasaya", icon: "\u{1F97B}", atk: 192, def: 102, hp: 1050, mp: 0, sdef: 87, phys: 0.38, magic: 0.12, price: 48000, desc: "+192 ATK, +102 DEF, +87 SDEF, +1050 HP. Sunrise hammered into silk: 38% physical, 12% magical resist. Wards the unholy: 30% less damage from undead and demons. Heaven-boss prize. Kasaya feed the Ascetic tree while worn." },
-    { id: "dawnchoir_habit", name: "Dawnchoir Habit", icon: "\u{1F56F}\uFE0F", def: 93, hp: 600, mp: 1050, sdef: 138, matk: 240, phys: 0.10, magic: 0.56, price: 46000, desc: "+240 MATK, +93 DEF, +138 SDEF, +600 HP, +1050 MP. Enchanted: 56% magical, 10% physical resist. Wards the unholy: 30% less damage from undead and demons. Morning-choir weave \u2014 heaven-boss prize. Habitus feed the Devotion tree while worn." },
+    { id: "cloth_robe", name: "Cloth Robe", icon: "🥋", def: 6, hp: 0, mp: 30, sdef: 15, matk: 9, phys: 0.05, magic: 0.1, price: 90, desc: "+9 MATK, +6 DEF, +15 SDEF, +30 MP. Light wrap: 5% physical, 10% magical resist." },
+    { id: "leather_armor", name: "Leather Armor", icon: "🦺", def: 15, hp: 39, mp: 0, st: 30, sdef: 15, phys: 0.12, magic: 0, price: 280, desc: "+15 DEF, +15 SDEF, +39 HP, +30 ST. Light: 12% physical resist." },
+    { id: "wayfarer_garb", name: "Wayfarer Garb", icon: "🧥", def: 30, hp: 105, mp: 60, st: 150, sdef: 27, phys: 0.18, magic: 0.05, spd: 0.1, price: 950, desc: "+30 DEF, +27 SDEF, +105 HP, +60 MP, +150 ST. Light: 18% physical, 5% magical resist. +0.1 SPD." },
+    { id: "shadowweave_garb", name: "Shadowweave Garb", icon: "🥷", def: 60, hp: 225, mp: 0, st: 300, sdef: 48, phys: 0.25, magic: 0.1, spd: 0.25, price: 4200, desc: "+60 DEF, +48 SDEF, +225 HP, +300 ST. Light: 25% physical, 10% magical. +0.25 SPD." },
+    { id: "iron_armor", name: "Iron Armor", icon: "🛡️", def: 27, hp: 83, mp: 0, st: 150, sdef: 6, phys: 0.28, magic: 0, price: 650, desc: "+27 DEF, +6 SDEF, +83 HP, +150 ST. Heavy: 28% physical resist." },
+    { id: "steel_plate", name: "Steel Plate", icon: "🛡️", def: 48, hp: 180, mp: 0, st: 300, sdef: 14, phys: 0.35, magic: 0, spd: -0.1, price: 2400, desc: "+48 DEF, +14 SDEF, +180 HP, +300 ST. Heavy: 35% physical resist. -0.1 SPD." },
+    { id: "mythril_plate", name: "Mythril Plate", icon: "🛡️", def: 83, hp: 330, mp: 0, st: 390, sdef: 30, phys: 0.42, magic: 0.05, spd: -0.1, price: 6800, desc: "+83 DEF, +30 SDEF, +330 HP, +390 ST. Heavy: 42% physical, 5% magical. -0.1 SPD." },
+    { id: "dragonbone_plate", name: "Dragonbone Plate", icon: "🐲", def: 173, hp: 720, mp: 0, st: 540, sdef: 54, phys: 0.5, magic: 0.1, spd: -0.2, price: 18500, desc: "+173 DEF, +54 SDEF, +720 HP, +540 ST. Heavy: 50% physical, 10% magical. -0.2 SPD." },
+    { id: "mage_robe", name: "Mage Robe", icon: "🧙", def: 15, hp: 0, mp: 150, sdef: 27, matk: 33, phys: 0, magic: 0.25, price: 550, desc: "+33 MATK, +15 DEF, +27 SDEF, +150 MP. Enchanted: 25% magical resist." },
+    { id: "archmage_robe", name: "Archmage Robe", icon: "🔮", def: 36, hp: 165, mp: 300, sdef: 48, matk: 83, phys: 0.05, magic: 0.35, price: 3900, desc: "+83 MATK, +36 DEF, +48 SDEF, +165 HP, +300 MP. Enchanted: 35% magical, 5% physical resist." },
+    { id: "holy_vestments", name: "Holy Vestments", icon: "😇", def: 39, hp: 195, mp: 390, sdef: 83, matk: 98, phys: 0.05, magic: 0.45, price: 8800, desc: "+98 MATK, +39 DEF, +83 SDEF, +195 HP, +390 MP. Enchanted: 45% magical resist. Blessed." },
+    { id: "wyrmshroud_robe", name: "Wyrmshroud Robe", icon: "🐲", def: 54, hp: 315, mp: 540, sdef: 173, matk: 143, phys: 0.08, magic: 0.45, price: 17500, desc: "+143 MATK, +54 DEF, +173 SDEF, +315 HP, +540 MP. Enchanted: 45% magical, 8% physical resist. Dragon-scale choir weave — the robe track's dragon tier." },
+    { id: "eclipse_garb", name: "Eclipse Garb", icon: "🌒", def: 173, hp: 630, mp: 300, st: 540, sdef: 173, matk: 60, phys: 0.32, magic: 0.25, spd: 0.3, price: 26000, desc: "+60 MATK, +173 DEF, +173 SDEF, +630 HP, +300 MP, +540 ST. Light: 32% physical, 25% magical. +0.3 SPD. Stitched from warlord shadows." },
+    { id: "oblivion_plate", name: "Oblivion Plate", icon: "🌌", def: 300, hp: 1350, mp: 0, st: 900, sdef: 105, phys: 0.55, magic: 0.15, spd: -0.2, price: 42000, desc: "+300 DEF, +105 SDEF, +1350 HP, +900 ST. Heavy: 55% physical, 15% magical resist. -0.2 SPD. Forged past the end of the world." },
+    { id: "void_mantle", name: "Void Mantle", icon: "🕳️", def: 90, hp: 480, mp: 900, sdef: 300, matk: 225, phys: 0.1, magic: 0.55, price: 40000, desc: "+225 MATK, +90 DEF, +300 SDEF, +480 HP, +900 MP. Enchanted: 55% magical, 10% physical resist. Wears the dark like a crown." },
+    { id: "dawnstone_plate", name: "Dawnstone Plate", icon: "🌟", def: 353, hp: 1650, mp: 0, st: 1080, sdef: 132, phys: 0.58, magic: 0.18, spd: -0.2, price: 48000, desc: "+353 DEF, +132 SDEF, +1650 HP, +1080 ST. Heavy: 58% physical, 18% magical resist. -0.2 SPD. Wards the unholy: 30% less damage from undead and demons. Sunrise hammered into plate — heaven-boss prize." },
+    { id: "dawnshroud_robe", name: "Dawnshroud Robe", icon: "🌅", def: 108, hp: 600, mp: 1080, sdef: 353, matk: 270, phys: 0.12, magic: 0.58, price: 46000, desc: "+270 MATK, +108 DEF, +353 SDEF, +600 HP, +1080 MP. Enchanted: 58% magical, 12% physical resist. Wards the unholy: 30% less damage from undead and demons. Woven dawnlight — heaven-boss prize." },
+    { id: "patched_kasaya", name: "Patched Kasaya", icon: "🥻", atk: 9, def: 5, hp: 30, mp: 0, st: 60, str: 0.2, sdef: 6, phys: 0.05, magic: 0, price: 120, desc: "+9 ATK, +5 DEF, +6 SDEF, +30 HP, +60 ST, +0.2 ST/s. A mendicant's patched gi: 5% physical resist. Kasaya feed the Ascetic tree while worn." },
+    { id: "ironthread_kasaya", name: "Ironthread Kasaya", icon: "🥻", atk: 24, def: 12, hp: 90, mp: 0, st: 150, str: 0.4, sdef: 12, phys: 0.12, magic: 0, price: 900, desc: "+24 ATK, +12 DEF, +12 SDEF, +90 HP, +150 ST, +0.4 ST/s. Iron-threaded saffron: 12% physical resist. Kasaya feed the Ascetic tree while worn." },
+    { id: "sunsilk_kasaya", name: "Sunsilk Kasaya", icon: "🥻", atk: 51, def: 24, hp: 210, mp: 0, st: 300, str: 0.6, sdef: 21, phys: 0.2, magic: 0.05, price: 5200, desc: "+51 ATK, +24 DEF, +21 SDEF, +210 HP, +300 ST, +0.6 ST/s. Sun-bright weave: 20% physical, 5% magical resist. Kasaya feed the Ascetic tree while worn." },
+    { id: "dragonhide_kasaya", name: "Dragonhide Kasaya", icon: "🥻", atk: 90, def: 45, hp: 450, mp: 0, st: 525, str: 0.9, sdef: 36, phys: 0.3, magic: 0.08, price: 15000, desc: "+90 ATK, +45 DEF, +36 SDEF, +450 HP, +525 ST, +0.9 ST/s. Cured dragon hide over saffron: 30% physical, 8% magical resist. Kasaya feed the Ascetic tree while worn." },
+    { id: "novice_habit", name: "Novice Habit", icon: "🕯️", def: 6, hp: 0, mp: 60, mpr: 0.2, sdef: 9, matk: 12, phys: 0, magic: 0.08, price: 130, desc: "+12 MATK, +6 DEF, +9 SDEF, +60 MP, +0.2 MP/s. A novice's dark tunic: 8% magical resist. Habitus feed the Devotion tree while worn." },
+    { id: "canon_habit", name: "Canon Habit", icon: "🕯️", def: 12, hp: 0, mp: 150, mpr: 0.4, sdef: 21, matk: 30, phys: 0, magic: 0.18, price: 950, desc: "+30 MATK, +12 DEF, +21 SDEF, +150 MP, +0.4 MP/s. Oath-bound black: 18% magical resist. Habitus feed the Devotion tree while worn." },
+    { id: "vesper_habit", name: "Vesper Habit", icon: "🕯️", def: 21, hp: 0, mp: 300, mpr: 0.6, sdef: 39, matk: 60, phys: 0, magic: 0.3, price: 5500, desc: "+60 MATK, +21 DEF, +39 SDEF, +300 MP, +0.6 MP/s. Evening-choir weave: 30% magical resist. Habitus feed the Devotion tree while worn." },
+    { id: "seraph_habit", name: "Seraph Habit", icon: "🕯️", def: 36, hp: 0, mp: 525, mpr: 0.9, sdef: 66, matk: 113, phys: 0, magic: 0.4, price: 16000, desc: "+113 MATK, +36 DEF, +66 SDEF, +525 MP, +0.9 MP/s. White-fire vestment: 40% magical resist. Habitus feed the Devotion tree while worn." },
+    { id: "oblivion_kasaya", name: "Oblivion Kasaya", icon: "\u{1F30C}", atk: 158, def: 83, hp: 840, mp: 0, st: 825, str: 1.2, sdef: 68, phys: 0.35, magic: 0.1, price: 42000, desc: "+158 ATK, +83 DEF, +68 SDEF, +840 HP, +825 ST, +1.2 ST/s. Woven from the end of the world: 35% physical, 10% magical resist. Hell-only. Kasaya feed the Ascetic tree while worn." },
+    { id: "void_habit", name: "Void Habit", icon: "\u{1F56F}\uFE0F", def: 75, hp: 450, mp: 825, mpr: 1.2, sdef: 113, matk: 195, phys: 0.08, magic: 0.5, price: 40000, desc: "+195 MATK, +75 DEF, +113 SDEF, +450 HP, +825 MP, +1.2 MP/s. Enchanted: 50% magical, 8% physical resist. Wears the dark like a crown. Hell-only. Habitus feed the Devotion tree while worn." },
+    { id: "dawnsilk_kasaya", name: "Dawnsilk Kasaya", icon: "\u{1F97B}", atk: 192, def: 102, hp: 1050, mp: 0, st: 1050, str: 1.5, sdef: 87, phys: 0.38, magic: 0.12, price: 48000, desc: "+192 ATK, +102 DEF, +87 SDEF, +1050 HP, +1050 ST, +1.5 ST/s. Sunrise hammered into silk: 38% physical, 12% magical resist. Wards the unholy: 30% less damage from undead and demons. Heaven-boss prize. Kasaya feed the Ascetic tree while worn." },
+    { id: "dawnchoir_habit", name: "Dawnchoir Habit", icon: "\u{1F56F}\uFE0F", def: 93, hp: 600, mp: 1050, mpr: 1.5, sdef: 138, matk: 240, phys: 0.10, magic: 0.56, price: 46000, desc: "+240 MATK, +93 DEF, +138 SDEF, +600 HP, +1050 MP, +1.5 MP/s. Enchanted: 56% magical, 10% physical resist. Wards the unholy: 30% less damage from undead and demons. Morning-choir weave \u2014 heaven-boss prize. Habitus feed the Devotion tree while worn." },
   ];
   for (const a of ARMORS) {
     const bonus = {};
@@ -363,6 +368,9 @@ window.Items = (() => {
     if (a.matk) bonus.matk = a.matk;
     if (a.hp) bonus.maxHp = a.hp;
     if (a.mp) bonus.maxMp = a.mp;
+    if (a.st) bonus.maxStamina = a.st;
+    if (a.mpr) bonus.mpRegen = a.mpr;
+    if (a.str) bonus.stRegen = a.str;
     if (a.spd) bonus.spd = a.spd;
     ITEMS[a.id] = { name: a.name, icon: a.icon, type: "equipment", slot: "armor", bonus, resPhys: a.phys, resMagic: a.magic, price: a.price, desc: a.desc };
   }
@@ -418,9 +426,9 @@ window.Items = (() => {
   ITEMS.sparkbow = { name: "Sparkbow", icon: "🏹", type: "equipment", slot: "weapon", wtype: "bow", bow: true, range: 11, bowSpeed: 1.3, bowPower: 1.6, element: "electric", bonus: { atk: 26 }, price: 7200, statusHit: { type: "paralyze", chance: 0.35, potency: 1.1, procCd: 10 }, desc: "+26 ATK spark bow. 1.6x power, paralyzes (35%, 10s cooldown). Ranged: DPS ≈ same-tier dagger. Needs arrows." };
   ITEMS.tidebow = { name: "Tidebow", icon: "🏹", type: "equipment", slot: "weapon", wtype: "bow", bow: true, range: 11, bowSpeed: 1.2, bowPower: 1.6, element: "water", bonus: { atk: 26 }, price: 6900, statusHit: { type: "poison", chance: 0.4, pct: 0.03, potency: 1.1, procCd: 10 }, desc: "+26 ATK tide bow. 1.6x power, brine-poisons (40%, 10s cooldown). Ranged: DPS ≈ same-tier dagger. Needs arrows." };
   // enchanted armor (plate and robes that carry an element)
-  ITEMS.dragonscale_vest = { name: "Dragonscale Vest", icon: "🐲", type: "equipment", slot: "armor", bonus: { def: 172, sdef: 54, maxHp: 720 }, resPhys: 0.4, resMagic: 0.12, price: 16500, desc: "+172 DEF, +54 SDEF, +720 HP. Dragonbone scales: 40% physical, 12% magical resist." };
-  ITEMS.emberplate = { name: "Emberplate", icon: "🌋", type: "equipment", slot: "armor", bonus: { def: 60, sdef: 15, maxHp: 240 }, resPhys: 0.4, resMagic: 0.05, price: 7300, desc: "+60 DEF, +15 SDEF, +240 HP. Ember-lined steel: 40% physical resist. Warm." };
-  ITEMS.rimeplate = { name: "Rimeplate", icon: "🧊", type: "equipment", slot: "armor", bonus: { def: 93, sdef: 33, maxHp: 360, maxMp: 240 }, resPhys: 0.42, resMagic: 0.15, price: 15500, desc: "+93 DEF, +33 SDEF, +360 HP, +240 MP. Rime-bound mythril: 42% physical, 15% magical resist." };
+  ITEMS.dragonscale_vest = { name: "Dragonscale Vest", icon: "🐲", type: "equipment", slot: "armor", bonus: { def: 172, sdef: 54, maxHp: 720, maxStamina: 540 }, resPhys: 0.4, resMagic: 0.12, price: 16500, desc: "+172 DEF, +54 SDEF, +720 HP, +540 ST. Dragonbone scales: 40% physical, 12% magical resist." };
+  ITEMS.emberplate = { name: "Emberplate", icon: "🌋", type: "equipment", slot: "armor", bonus: { def: 60, sdef: 15, maxHp: 240, maxStamina: 300 }, resPhys: 0.4, resMagic: 0.05, price: 7300, desc: "+60 DEF, +15 SDEF, +240 HP, +300 ST. Ember-lined steel: 40% physical resist. Warm." };
+  ITEMS.rimeplate = { name: "Rimeplate", icon: "🧊", type: "equipment", slot: "armor", bonus: { def: 93, sdef: 33, maxHp: 360, maxMp: 240, maxStamina: 390 }, resPhys: 0.42, resMagic: 0.15, price: 15500, desc: "+93 DEF, +33 SDEF, +360 HP, +240 MP, +390 ST. Rime-bound mythril: 42% physical, 15% magical resist." };
   ITEMS.tideward_robe = { name: "Tideward Robe", icon: "🌊", type: "equipment", slot: "armor", bonus: { def: 27, sdef: 48, matk: 81, maxHp: 120, maxMp: 300 }, resPhys: 0.05, resMagic: 0.42, price: 9600, desc: "+81 MATK, +27 DEF, +48 SDEF, +120 HP, +300 MP. Pearl-warded: 42% magical resist." };
   // ---- named legendaries (unique effects, dungeon/boss finds) ----
   ITEMS.dawnbreaker = { name: "Dawnbreaker", icon: "🌅", type: "equipment", slot: "weapon", wtype: "sword", mat: "holy", tierMult: 2.5, undeadMult: 4, dmgType: "blade", element: "holy", weaponRange: 1.8, weaponCd: 0.36, bonus: { atk: 150, maxHp: 225 }, price: 42000, legendary: true, smite: true, statusHit: { type: "blind", chance: 0.7, potency: 1.5 }, desc: "Legendary dawn-blade. +150 ATK, +225 HP. 4x vs undead and demons, sears the blind. (blade/holy)" };
@@ -436,9 +444,11 @@ window.Items = (() => {
   for (const _id in ITEMS) { try { ITEMS[_id].id = _id; } catch (e) { } }
   // Loot tiers: a new tier about every 20 levels. Tiers 0-2 drop in the
   // wild world (level-gated) and cap the overworld; tier 3 (mythril band)
-  // surfaces ONLY from floor 5+ of surface delves, tier 4 (mythril band)
+  // surfaces ONLY from floor 4+ of surface delves, tier 4 (mythril band)
   // likewise, tier 5 (dragon band) ONLY from floor 11+ — never from shops,
   // overworld loot, bosses above those floors, or any other source.
+  // Surface delve floor 1 caps at tier 1 (iron band) — steel (tier 2)
+  // surfaces from floor 2+.
   // Tier 6 (oblivion) is hell-only: deep hell delves and their warlords.
   // (Emerald foci live in tier 3, silver oddments in tier 2, the
   // yggdrasil bow in tier 5 — so each band gates with its own tier.)
@@ -479,25 +489,29 @@ window.Items = (() => {
       if (isHellOnly(id)) return "🔥 Hell only — deep hell delves, hell warlords, hell forge.";
       if (isSurfGated(id)) {
         if (SURF_FLOOR11_GEAR.includes(id) || SURF_FLOOR11_MATS.includes(id)) return "⛏️ Surface delve floor 11+ only (chests, boss hoards, corpses) — never shops or overworld.";
-        return "⛏️ Surface delve floor 5+ only (chests, boss hoards, corpses) — never shops or overworld.";
+        return "⛏️ Surface delve floor 4+ only (chests, boss hoards, corpses) — never shops or overworld.";
       }
       return "";
     } catch (e) { return ""; }
   }
   // ---- surface delve floor-gates (user spec): the mythril/emerald/
-  // frostwood band surfaces ONLY from floor 5+ of a surface delve, the
+  // frostwood band surfaces ONLY from floor 4+ of a surface delve, the
   // dragonbone/yggdrasil/dragon-horn band ONLY from floor 11+ — and from
   // nowhere else in the surface world (not overworld chests/drops, not
   // bosses of any level, not shops, not chopping, not contracts). Hell
-  // runs its own deep rules and is exempt from these gates.
-  const SURF_FLOOR5_GEAR = [
+  // runs its own deep rules and is exempt from these gates. The steel
+  // band (tier 2: steel/silver gear, sapphire foci, archmage robes and
+  // their kasaya/habitus kin) needs no list — the floor-1 tier cap keeps
+  // it off the first floor, and it is free from floor 2+.
+  const SURF_FLOOR4_GEAR = [
     "mythril_sword", "mythril_dagger", "mythril_whip", "mythril_axe", "mythril_hammer", "mythril_spear",
     "frostwood_bow", "frostfang_bow", "wand_emerald", "staff_emerald",
+    "wand_holybead", "staff_holybead", "holy_vestments", "holy_ring", "shadowweave_garb",
     "mythril_plate", "mythril_shield", "rimebrand", "inferbrand", "tempest_spear", "rimeplate",
     "sunsilk_kasaya", "vesper_habit",
     "stormcall", "arrow_mythril", "shuriken_mythril",
   ];
-  const SURF_FLOOR5_MATS = ["mythril_ore", "emerald_gem", "frostwood_log"];
+  const SURF_FLOOR4_MATS = ["mythril_ore", "emerald_gem", "frostwood_log"];
   const SURF_FLOOR11_GEAR = [
     "dragonbone_sword", "dragonbone_dagger", "dragonbone_whip", "dragonbone_axe", "dragonbone_hammer", "dragonbone_spear",
     "dragonbone_plate", "dragonbone_shield", "wyrmshroud_robe", "wand_dragonhorn", "staff_dragonhorn", "yggdrasil_bow",
@@ -506,33 +520,33 @@ window.Items = (() => {
     "dragonscale_vest", "wyrmfang", "oathbow", "arrow_dragonbone", "shuriken_dragonbone",
   ];
   const SURF_FLOOR11_MATS = ["dragon_bone", "dragon_horn", "yggdrasil_branch"];
-  const SURF_GATED_ALL = [...new Set([...SURF_FLOOR5_GEAR, ...SURF_FLOOR5_MATS, ...SURF_FLOOR11_GEAR, ...SURF_FLOOR11_MATS])];
+  const SURF_GATED_ALL = [...new Set([...SURF_FLOOR4_GEAR, ...SURF_FLOOR4_MATS, ...SURF_FLOOR11_GEAR, ...SURF_FLOOR11_MATS])];
   function isSurfGated(id) { try { return SURF_GATED_ALL.includes(id); } catch (e) { return false; } }
   // May the surface hero obtain floor-gated tiers right now? Hell delves
   // run their own deep rules (always allowed here — hell callers keep
   // their own depth checks); every other dimension must be a surface
   // delve at the gated floor or deeper. Overworld (and shallow floors)
-  // get {mid:false, top:false}.
+  // get {low:false, mid:false, top:false}.
   function surfFloorGate(p) {
     try {
       try { if (window.Hell && window.Hell.isHellDungeonActive && window.Hell.isHellDungeonActive()) return { mid: true, top: true }; } catch (e) { }
       const G = (window.Game && window.Game.G) || null;
       const pl = p || (G && G.player) || null;
-      if (!pl || !pl.inDungeon) return { mid: false, top: false };
+      if (!pl || !pl.inDungeon) return { low: false, mid: false, top: false };
       let dim = null;
       try { dim = (G && G.dungeon && G.dungeon.dim) || null; } catch (e) { }
       if (!dim) { try { dim = (window.Game && window.Game.playerDim && window.Game.playerDim()) || "surf"; } catch (e) { dim = "surf"; } }
-      if (dim && dim !== "surf") return { mid: false, top: false };
+      if (dim && dim !== "surf") return { low: false, mid: false, top: false };
       let fl = 0;
       try { fl = ((pl && pl.dungeonLevel) | 0) || (((G && G.player && G.player.dungeonLevel) | 0)) || 1; } catch (e) { fl = 1; }
-      return { mid: fl >= 5, top: fl >= 11 };
-    } catch (e) { return { mid: false, top: false }; }
+      return { low: fl >= 2, mid: fl >= 4, top: fl >= 11 };
+    } catch (e) { return { low: false, mid: false, top: false }; }
   }
   // Is one gated item id obtainable under this gate? (Ungated ids pass.)
   function surfGateAllows(id, gate) {
     try {
       if (!isSurfGated(id)) return true;
-      const g = gate || { mid: false, top: false };
+      const g = gate || { low: false, mid: false, top: false };
       if (SURF_FLOOR11_GEAR.includes(id) || SURF_FLOOR11_MATS.includes(id)) return !!g.top;
       return !!g.mid;
     } catch (e) { return false; }
@@ -989,7 +1003,7 @@ window.Items = (() => {
   // resists, procs, multipliers or power/speed lines.
   const GEAR_UP_MAX = 5, GEAR_UP_STEP = 0.50, GEAR_UP_PCT = GEAR_UP_STEP * 100;
   const GEAR_UP_COST_MULT = [0.5, 1, 2, 4, 8]; // to go 0->1, 1->2, ... 4->5
-  const GEAR_UP_STAT_KEYS = ["atk", "matk", "def", "sdef", "maxHp", "maxMp", "maxStamina", "spd"];
+  const GEAR_UP_STAT_KEYS = ["atk", "matk", "def", "sdef", "maxHp", "maxMp", "maxStamina", "spd", "mpRegen", "stRegen"];
   // legacy compat: highest level among your copies (old saves migrate their
   // p.gearUp onto every copy in ensureProgression, so this stays truthful)
   function gearUpLevel(p, id) {
@@ -1975,16 +1989,16 @@ window.Items = (() => {
     const matOk = (id) => !matLocked(p, id);
     if (Math.random() < (opts.dungeon ? 0.4 : 0.15)) drops.push({ id: "iron_ore", n: 1 + ((Math.random() * 2) | 0) });
     if (effD >= 2 && Math.random() < 0.18) drops.push({ id: "silver_ore", n: 1 });
-    // mythril surfaces ONLY from floor 5+ of surface delves (hell delves
+    // mythril surfaces ONLY from floor 4+ of surface delves (hell delves
     // keep their own depth rule) — never overworld, never shallow floors.
     if (matOk("mythril_ore") && Math.random() < 0.10 && ((hellGold && effD >= 4) || gate.mid)) drops.push({ id: "mythril_ore", n: 1 });
     if (effD >= 2 && matOk("ruby_gem") && Math.random() < 0.12) {
-      // emeralds join the gem find ONLY from floor 5+ (same band as mythril)
+      // emeralds join the gem find ONLY from floor 4+ (same band as mythril)
       const gpool = (gate.mid && matOk("emerald_gem")) ? ["ruby_gem", "sapphire_gem", "emerald_gem"] : ["ruby_gem", "sapphire_gem"];
       drops.push({ id: gpool[(Math.random() * gpool.length) | 0], n: 1 });
     }
     if (effD >= 2 && Math.random() < 0.10) {
-      // frostwood joins the log find ONLY from floor 5+ (mythril band)
+      // frostwood joins the log find ONLY from floor 4+ (mythril band)
       const lpool = gate.mid ? ["frostwood_log", "emberwood_log", "wolf_hide"] : ["emberwood_log", "wolf_hide"];
       drops.push({ id: lpool[(Math.random() * lpool.length) | 0], n: 1 });
     }
@@ -2001,7 +2015,7 @@ window.Items = (() => {
       const apool = ["arrow_iron", "arrow_iron", "arrow_poison"];
       if (effD >= 2) apool.push("arrow_steel");
       if (effD >= 4) apool.push("arrow_silver");
-      // fletched tiers gate with their bands: mythril floor 5+, dragonbone 11+
+      // fletched tiers gate with their bands: mythril floor 4+, dragonbone 11+
       if (effD >= 6 && gate.mid) apool.push("arrow_mythril");
       if (effD >= 8 && gate.top) apool.push("arrow_dragonbone");
       if (effD >= 10 && hellGold) apool.push("arrow_oblivion", "arrow_oblivion");
@@ -2038,10 +2052,11 @@ window.Items = (() => {
     } catch (e) {}
     let cap = gearTierCap(inDungeon, depth);
     if (hell && !inDungeon) cap = 4;
-    // surface delves gate by FLOOR, not remoteness: floors 1-4 cap at steel
-    // (tier 2), floors 5-10 reach the mythril band (tier 4), floors 11+
-    // reach the dragon band (tier 5). Overworld stays capped at steel.
-    if (!hell) cap = !inDungeon ? 2 : gate.top ? 5 : gate.mid ? 4 : 2;
+    // surface delves gate by FLOOR, not remoteness: floor 1 caps at iron
+    // (tier 1), floors 2-3 reach the steel band (tier 2), floors 4-10
+    // reach the mythril band (tier 4), floors 11+ reach the dragon band
+    // (tier 5). Overworld stays capped at steel.
+    if (!hell) cap = !inDungeon ? 2 : gate.top ? 5 : gate.mid ? 4 : gate.low ? 2 : 1;
     const eqP = hell ? (inDungeon ? 1 : 0.6) : (inDungeon ? 0.34 : 0.1);
     if (Math.random() < eqP) {
       let tierIdx = randomEquipTier(p, null, inDungeon ? Math.max(depth, 1) : 0, cap);
@@ -2065,10 +2080,10 @@ window.Items = (() => {
     }
     // dragon caches (tier 5) surface ONLY from floor 11+ — even the last
     // floors of the hardest delves pay steel/mythril before that. Legend
-    // caches (7+) pay stormcall from floor 5+, the rest from floor 11+.
+    // caches (7+) pay stormcall from floor 4+, the rest from floor 11+.
     // Dawnstone legend (daybreak) NEVER surfaces from chests — heaven
     // overworld bosses only.
-    const legendPool = (gate.top ? LEGENDARIES : gate.mid ? LEGENDARIES.filter(id => SURF_FLOOR5_GEAR.includes(id)) : []).filter(id => !isDawnstone(id));
+    const legendPool = (gate.top ? LEGENDARIES : gate.mid ? LEGENDARIES.filter(id => SURF_FLOOR4_GEAR.includes(id)) : []).filter(id => !isDawnstone(id));
     if (inDungeon && depth >= 10 && Math.random() < 0.05 && (hell || gate.top)) {
       drops.push({ id: EQUIP_BY_TIER[5][(Math.random() * EQUIP_BY_TIER[5].length) | 0], n: 1 });
     } else if (inDungeon && depth >= 7 && Math.random() < 0.03 && (hell || legendPool.length)) {
@@ -2113,13 +2128,14 @@ window.Items = (() => {
       // gear follows the BOSS's level, but never above the delve's tier cap:
       // dragon tier from level 110+ bosses (the ancient horrors) at floor
       // 11+, oblivion from hell warlords — never from shops or open loot,
-      // and on the surface never above the floor-gate (floors 1-4 steel,
-      // 5-10 mythril band, 11+ dragon band), whatever the boss's level
+      // and on the surface never above the floor-gate (floor 1 iron,
+      // 2-3 steel, 4-10 mythril band, 11+ dragon band), whatever the
+      // boss's level
       const blv = (mob && mob.lv) || 1;
       let hellBoss = false;
       try { hellBoss = !!(window.Hell && window.Hell.isHellDungeonActive && window.Hell.isHellDungeonActive()); } catch (e) {}
-      const bgate = hellBoss ? { mid: true, top: true } : surfFloorGate(p);
-      const bcap = hellBoss ? Math.max(2, gearTierCap(true, depth)) : (bgate.top ? 5 : bgate.mid ? 4 : 2);
+      const bgate = hellBoss ? { low: true, mid: true, top: true } : surfFloorGate(p);
+      const bcap = hellBoss ? Math.max(2, gearTierCap(true, depth)) : (bgate.top ? 5 : bgate.mid ? 4 : bgate.low ? 2 : 1);
       let bTier = Math.min(tierForLevel(blv, 0, depth), bcap);
       if (blv >= 110 && !hellBoss && bgate.top) bTier = Math.max(bTier, 5); // ancient horrors hoard dragon-tier steel
       const tier = EQUIP_BY_TIER[bTier];
@@ -2136,11 +2152,11 @@ window.Items = (() => {
         if (Math.random() < 0.4) { const _lp2 = LEGENDARIES.filter(id => !isDawnstone(id)); drops.push({ id: _lp2[(Math.random() * _lp2.length) | 0], n: 1 }); }
       } else {
         // lesser bosses can drop the good stuff, gated by their own level —
-        // and by the surface floor-gates (no mythril band before floor 5,
+        // and by the surface floor-gates (no mythril band before floor 4,
         // no dragon band before floor 11, even for bosses)
-        const hyA = HYBRIDS.filter(h => surfGateAllows(h, bgate) && !isDawnstone(h) && !isHellOnly(h));
+        const hyA = HYBRIDS.filter(h => hybridTier(h) <= bcap && surfGateAllows(h, bgate) && !isDawnstone(h) && !isHellOnly(h));
         if (blv >= 40 && Math.random() < 0.3 && hyA.length) drops.push({ id: hyA[(Math.random() * hyA.length) | 0], n: 1 });
-        const lgA = (bgate.top ? LEGENDARIES : bgate.mid ? LEGENDARIES.filter(id => SURF_FLOOR5_GEAR.includes(id)) : []).filter(id => !isDawnstone(id));
+        const lgA = (bgate.top ? LEGENDARIES : bgate.mid ? LEGENDARIES.filter(id => SURF_FLOOR4_GEAR.includes(id)) : []).filter(id => !isDawnstone(id));
         if (blv >= 80 && Math.random() < 0.18 && lgA.length) drops.push({ id: lgA[(Math.random() * lgA.length) | 0], n: 1 });
       }
       drops.push({ id: "potion", n: 2 });
@@ -2155,7 +2171,8 @@ window.Items = (() => {
       }
       // tough wilds can drop real gear: tier follows the victim's level but
       // never above the location cap (overworld stops at steel; surface
-      // delves gate by floor — 1-4 steel, 5-10 mythril band, 11+ dragon)
+      // delves gate by floor — 1 iron, 2-3 steel, 4-10 mythril band,
+      // 11+ dragon)
       let depth = lootDepth(0);
       const mobLv = (mob && mob.lv) || (p && p.lv) || 1;
       const eqP = 0.05 + Math.min(0.2, mobLv * 0.015) + lukB;
@@ -2167,7 +2184,7 @@ window.Items = (() => {
           let isHell = false;
           try { isHell = !!(window.Hell && window.Hell.isHellDungeonActive && window.Hell.isHellDungeonActive()); } catch (e) { }
           if (isHell) ncap = gearTierCap(true, depth);
-          else { const ng = surfFloorGate(p); ncap = ng.top ? 5 : ng.mid ? 4 : 2; }
+          else { const ng = surfFloorGate(p); ncap = ng.top ? 5 : ng.mid ? 4 : ng.low ? 2 : 1; }
         }
         const tier = EQUIP_BY_TIER[randomEquipTier(fake, null, depth, ncap)];
         let pool = tier.filter(id => !(HYBRIDS.includes(id) || LEGENDARIES.includes(id)));
@@ -2190,7 +2207,7 @@ window.Items = (() => {
         const R = Math.random;
         const matOk = (id) => !matLocked(p, id);
         // surface floor-gate for corpse mats (hell delves always open):
-        // mythril/emerald/frostwood need floor 5+, dragonbone/yggdrasil/
+        // mythril/emerald/frostwood need floor 4+, dragonbone/yggdrasil/
         // dragon-horn floor 11+ — overworld corpses never pay them.
         const ngate = surfFloorGate(p);
         // dragons + drakes: bone + horn (the only source — never shops/chests).
@@ -2212,7 +2229,7 @@ window.Items = (() => {
             if (R() < 0.7) drops.push({ id: "dragon_horn", n: 1 });
           }
         }
-        // winter hunters: rime + frostwood (frostwood needs floor 5+)
+        // winter hunters: rime + frostwood (frostwood needs floor 4+)
         if (/yeti|rime_wolf|shiver_owl|yuki_onna|jotunn_jarl/i.test(k)) {
           if (matOk("rime_crystal") && R() < 0.5) drops.push({ id: "rime_crystal", n: 1 });
           if (ngate.mid && R() < 0.3) drops.push({ id: "frostwood_log", n: 1 });
@@ -2235,7 +2252,7 @@ window.Items = (() => {
         if (/wolf|fenrir|anubite|sandmaw|centaur|satyr|tanuki|minotaur|chimera|lamassu|umbral_stag|velociraptor|sphinx_cub|wild_horse|tide_turtle|cinder_steed|cinder_maw|mire_lurker|magma_tortoise|burrow_mole/i.test(k) && R() < 0.45) drops.push({ id: "wolf_hide", n: 1 + ((R() * 2) | 0) });
         // fey-shy magic: unicorn hair (vale's rarest bowstring)
         if (/kitsune|gloomspinner|umbral_stag|hulder|puca|lamassu/i.test(k) && matOk("unicorn_hair") && R() < 0.2) drops.push({ id: "unicorn_hair", n: 1 });
-        // delvers + goblinoids: iron, stone, old gems (emeralds need floor 5+)
+        // delvers + goblinoids: iron, stone, old gems (emeralds need floor 4+)
         if (/goblin|kobold|redcap|nurikabe|troll|domovoi|khepri|scarab|nurikabe|oni|bandit|outlaw|murderer|burrow_mole/i.test(k)) {
           if (R() < 0.3) drops.push({ id: "iron_ore", n: 1 + ((R() * 2) | 0) });
           if (R() < 0.2) drops.push({ id: "stone", n: 1 + ((R() * 2) | 0) });
@@ -2315,6 +2332,23 @@ window.Items = (() => {
     } catch (e) { }
     try { ensureNpcBlade(npc); } catch (e) { }
     try { ensureNpcArcher(npc); } catch (e) { }
+    try { ensureNpcArmor(npc); } catch (e) { }
+    try { ensureNpcSpells(npc); } catch (e) { }
+    // stamina pool backfill (Dec 2026): steel hands run on it now
+    try {
+      if (npc.maxStamina == null || npc.stamina == null) {
+        let smax = 100;
+        try {
+          if (window.Entities && window.Entities.makeNpcStatBlock) {
+            const st = window.Entities.makeNpcStatBlock(npc.lv || 1, npc.role, 0, { abilities: npc.abilities, weapon: (npc.equipment && npc.equipment.weapon) || null, armor: (npc.equipment && npc.equipment.armor) || null });
+            if (st && st.maxStamina) smax = st.maxStamina;
+          }
+        } catch (e2) { }
+        npc.maxStamina = Math.max(100, smax | 0 || 100);
+        if (npc.stamina == null) npc.stamina = npc.maxStamina;
+      }
+      if (npc.baseMaxStamina == null) npc.baseMaxStamina = Math.max(0, (npc.maxStamina | 0) - (npcBonus(npc).maxStamina || 0));
+    } catch (e) { }
     if (npc.baseMaxHp == null) {
       const b = npcBonus(npc);
       npc.baseMaxHp = (npc.maxHp | 0) - (b.maxHp || 0);
@@ -2348,16 +2382,128 @@ window.Items = (() => {
     } catch (e) { }
     return false;
   }
+  // ---- NPC steel progression: higher levels wield higher tiers ----
+  // Tier ladder mirrors the mob war bands but keeps the NPC's own family:
+  // a lv-5 guard keeps her rusted axe (never downgraded to a sword), a
+  // lv-70 veteran upgrades it to mythril. Swords climb
+  // wooden->rusted->iron->steel->mythril->dragonbone; other melee fams climb
+  // rusted->iron->steel->mythril->dragonbone; bows climb
+  // old->oak->yew->wardens->frostwood->yggdrasil.
+  function npcGearTierFor(lv) {
+    const L = Math.max(1, lv | 0 || 1);
+    if (L >= 85) return 5;
+    if (L >= 65) return 4;
+    if (L >= 45) return 3;
+    if (L >= 25) return 2;
+    if (L >= 3) return 1;
+    return 0;
+  }
+  const NPC_WEAPON_TIERS = {
+    sword: ["wooden_sword", "rusted_sword", "iron_sword", "steel_sword", "mythril_sword", "dragonbone_sword"],
+    dagger: ["rusted_dagger", "rusted_dagger", "iron_dagger", "steel_dagger", "mythril_dagger", "dragonbone_dagger"],
+    axe: ["rusted_axe", "rusted_axe", "iron_axe", "steel_axe", "mythril_axe", "dragonbone_axe"],
+    hammer: ["rusted_hammer", "rusted_hammer", "iron_hammer", "steel_hammer", "mythril_hammer", "dragonbone_hammer"],
+    spear: ["rusted_spear", "rusted_spear", "iron_spear", "steel_spear", "mythril_spear", "dragonbone_spear"],
+    whip: ["rusted_whip", "rusted_whip", "iron_whip", "steel_whip", "mythril_whip", "dragonbone_whip"],
+    bow: ["old_bow", "oak_bow", "yew_bow", "wardens_bow", "frostwood_bow", "yggdrasil_bow"],
+  };
+  const NPC_ARMOR_TRACKS = {
+    robe: ["cloth_robe", "mage_robe", "archmage_robe", "tideward_robe", "holy_vestments", "wyrmshroud_robe"],
+    habitus: ["novice_habit", "canon_habit", "canon_habit", "vesper_habit", "vesper_habit", "seraph_habit"],
+    light: ["leather_armor", "leather_armor", "wayfarer_garb", "wayfarer_garb", "shadowweave_garb", "shadowweave_garb"],
+    heavy: ["leather_armor", "iron_armor", "steel_plate", "mythril_plate", "mythril_plate", "dragonbone_plate"],
+    kasaya: ["patched_kasaya", "ironthread_kasaya", "ironthread_kasaya", "sunsilk_kasaya", "sunsilk_kasaya", "dragonhide_kasaya"],
+  };
+  function npcFamOfWeapon(itemId) {
+    try {
+      const it = itemId && ITEMS[itemId];
+      if (!it) return null;
+      if (it.bow || it.wtype === "bow") return "bow";
+      if (it.wand || it.staff || it.wtype === "wand" || it.wtype === "staff") return "focus";
+      return it.wtype || null;
+    } catch (e) { return null; }
+  }
+  function npcWeaponTierOf(itemId) {
+    try {
+      for (const fam of Object.keys(NPC_WEAPON_TIERS)) {
+        const ix = NPC_WEAPON_TIERS[fam].indexOf(itemId);
+        if (ix >= 0) return { fam, tier: ix };
+      }
+      // storied steel (smite blades, dawnbreakers, legendaries): never replaced
+      const it = itemId && ITEMS[itemId];
+      if (it && it.type === "equipment" && it.slot === "weapon") return { fam: npcFamOfWeapon(itemId), tier: 9 };
+      return null;
+    } catch (e) { return null; }
+  }
+  function npcArmorTierOf(itemId) {
+    try {
+      for (const tr of Object.keys(NPC_ARMOR_TRACKS)) {
+        const ix = NPC_ARMOR_TRACKS[tr].indexOf(itemId);
+        if (ix >= 0) return { track: tr, tier: ix };
+      }
+      return null;
+    } catch (e) { return null; }
+  }
+  function npcOwnedWeapons(npc) {
+    const out = [];
+    try {
+      const eq = npc.equipment && npc.equipment.weapon;
+      if (eq && ITEMS[eq]) out.push({ id: eq, worn: true });
+      for (const arr of [npc.inventory, npc.stock]) for (const s of (arr || [])) {
+        if (s && s.id && ITEMS[s.id] && ITEMS[s.id].type === "equipment" && ITEMS[s.id].slot === "weapon") {
+          if (!out.some(o => o.id === s.id)) out.push({ id: s.id, worn: false });
+        }
+      }
+    } catch (e) { }
+    return out;
+  }
   function ensureNpcBlade(npc) {
     if (!npc || npc.kind === "player" || npc.role === "mob") return npc;
-    if (npcHasWeapon(npc)) return npc;
-    // humble level-fit blade: a new tier about every 20 levels (never dragon)
-    const lv = npc.lv || 1;
-    const id = lv >= 80 ? "mythril_sword" : lv >= 40 ? "steel_sword" : lv >= 20 ? "iron_sword" : lv >= 3 ? "rusted_sword" : "wooden_sword";
+    // keep the fighter's own family: upgrade what they own, never swap an
+    // axe-hand to swords. Archers keep their bow on top (blade stays packed).
+    const owned = npcOwnedWeapons(npc);
+    if (!owned.length) {
+      const lv = npc.lv || 1;
+      const tier = npcGearTierFor(lv);
+      const id = (NPC_WEAPON_TIERS.sword || [])[tier] || "rusted_sword";
+      try {
+        if (id && ITEMS[id]) {
+          addItem(npc, id, 1);
+          npc.equipment = npc.equipment || { weapon: null, armor: null, trinket: null };
+          if (!npc.equipment.weapon) npc.equipment.weapon = id;
+        }
+      } catch (e) { }
+      return npc;
+    }
+    // upgrade the main non-bow steel (worn preferred) when the level earns it
     try {
-      addItem(npc, id, 1);
+      const lv = npc.lv || 1;
+      const want = npcGearTierFor(lv);
+      let main = owned.find(o => npcFamOfWeapon(o.id) !== "bow" && o.worn) || owned.find(o => npcFamOfWeapon(o.id) !== "bow") || null;
+      if (!main) return npc;
+      const cur = npcWeaponTierOf(main.id);
+      if (!cur || cur.tier >= 9) return npc;
+      if (want <= cur.tier) return npc;
+      const list = NPC_WEAPON_TIERS[cur.fam];
+      const nid = list && list[want];
+      if (!nid || !ITEMS[nid] || owned.some(o => o.id === nid)) {
+        // already owns the tier (packed): just wield the best owned of the fam
+        try {
+          let best = main.id, bt = cur.tier;
+          for (const o of owned) {
+            if (npcFamOfWeapon(o.id) !== cur.fam) continue;
+            const q = npcWeaponTierOf(o.id);
+            if (q && q.tier > bt && q.tier <= want) { best = o.id; bt = q.tier; }
+          }
+          if (best !== main.id) {
+            if (npcFamOfWeapon(npc.equipment.weapon) !== "bow") npc.equipment.weapon = best;
+          }
+        } catch (e2) { }
+        return npc;
+      }
+      addItem(npc, nid, 1);
       npc.equipment = npc.equipment || { weapon: null, armor: null, trinket: null };
-      if (!npc.equipment.weapon) npc.equipment.weapon = id;
+      if (npcFamOfWeapon(npc.equipment.weapon) !== "bow") npc.equipment.weapon = nid;
     } catch (e) { }
     return npc;
   }
@@ -2390,20 +2536,104 @@ window.Items = (() => {
   function ensureNpcArcher(npc) {
     if (!npc || npc.kind === "player" || npc.role === "mob") return npc;
     if (!ARCHER_ROLES.includes(npc.role)) return npc;
+    const want = npcGearTierFor(npc.lv || 1);
+    const bid = (NPC_WEAPON_TIERS.bow || [])[want] || "oak_bow";
     if (!npcHasBow(npc)) {
-      const lv = npc.lv || 1;
-      const bid = lv >= 80 ? "yggdrasil_bow" : lv >= 40 ? "wardens_bow" : lv >= 20 ? "yew_bow" : lv >= 3 ? "oak_bow" : "old_bow";
       try {
-        addItem(npc, bid, 1);
-        npc.equipment = npc.equipment || { weapon: null, armor: null, trinket: null };
-        npc.equipment.weapon = bid;
+        if (bid && ITEMS[bid]) {
+          addItem(npc, bid, 1);
+          npc.equipment = npc.equipment || { weapon: null, armor: null, trinket: null };
+          npc.equipment.weapon = bid;
+        }
+      } catch (e) { }
+    } else {
+      // higher level draws a higher-tier bow (wield the best owned up to want)
+      try {
+        const owned = npcOwnedWeapons(npc).filter(o => npcFamOfWeapon(o.id) === "bow");
+        let best = null, bt = -1;
+        for (const o of owned) { const q = npcWeaponTierOf(o.id); if (q && q.tier > bt && q.tier <= want) { best = o.id; bt = q.tier; } }
+        if (!owned.some(o => o.id === bid) && bid && ITEMS[bid]) {
+          const curWorn = npc.equipment && npc.equipment.weapon;
+          const curQ = curWorn ? npcWeaponTierOf(curWorn) : null;
+          if (!curQ || (curQ.tier < want && curQ.tier < 9)) { addItem(npc, bid, 1); npc.equipment.weapon = bid; }
+          else if (best && best !== curWorn) npc.equipment.weapon = best;
+        } else if (best && npc.equipment && npc.equipment.weapon !== best) npc.equipment.weapon = best;
       } catch (e) { }
     }
     if (npcArrowCount(npc) < 8) { try { addItem(npc, "arrow_iron", 15); } catch (e) { } }
     return npc;
   }
+  function npcArmorTrackFor(npc) {
+    // casters robe, menders habitus, samurai kasaya (form gi), speedsters
+    // light, men-at-arms plate. Reuses the mob track logic off the NPC's
+    // own kit so the plate matches how they actually fight — except guards
+    // and knights, who hold the wall in plate, not a gi.
+    try {
+      const R0 = String((npc && npc.role) || "");
+      if (/^(guard|knight|marshal|monarch|magistrate|warrior|hell_guard|angel_guard|seraph_guard)$/.test(R0)) return "heavy";
+      if (/^samurai$/.test(R0)) return "kasaya";
+      if (/^(rogue|hunter|ninja|thief|adventurer|villager|unemployed|noble|chancellor|guildmaster|harbormaster|dockworker|desert_nomad|steppe_rider|heavendweller|angel_merchant|hell_merchant|slave)$/.test(R0)) return "light";
+      const E = window.Entities;
+      if (E && E.mobArmorTrack) {
+        const kit = (window.CFG && window.CFG.ROLE_KIT && window.CFG.ROLE_KIT[npc.role]) || [];
+        return E.mobArmorTrack(npc.role, { abilities: npc.abilities && npc.abilities.length ? npc.abilities : kit }) || "heavy";
+      }
+    } catch (e) { }
+    try {
+      const R = String(npc.role || "");
+      if (/mage|scholar|runesmith|tidewarden/.test(R)) return "robe";
+      if (/healer|priest|cleric|highpriest|shaman|skald|choir|herbalist/.test(R)) return "habitus";
+      if (/samurai/.test(R)) return "kasaya";
+      if (/rogue|hunter|ninja|thief|adventurer/.test(R)) return "light";
+      return "heavy";
+    } catch (e2) { return "heavy"; }
+  }
+  function ensureNpcArmor(npc) {
+    // main attire by track + level: a lv-60 scholar wears archmage silk, a
+    // lv-60 guard wears mythril plate. Upgrades in place (old suit stays
+    // packed). Never strips a gifted storied piece.
+    if (!npc || npc.kind === "player" || npc.role === "mob") return npc;
+    try {
+      npc.equipment = npc.equipment || { weapon: null, armor: null, trinket: null, shield: null };
+      const want = npcGearTierFor(npc.lv || 1);
+      const track = npcArmorTrackFor(npc) || "heavy";
+      const list = NPC_ARMOR_TRACKS[track] || NPC_ARMOR_TRACKS.heavy;
+      const nid = list[Math.max(0, Math.min(5, want))];
+      if (!nid || !ITEMS[nid]) return npc;
+      const cur = npc.equipment.armor;
+      if (!cur) {
+        addItem(npc, nid, 1);
+        npc.equipment.armor = nid;
+        return npc;
+      }
+      if (cur === nid) return npc;
+      const cq = npcArmorTierOf(cur);
+      if (!cq) {
+        // storied/foreign plate (gifted legendaries): keep wearing it
+        return npc;
+      }
+      if (cq.track === track && cq.tier >= want) return npc;
+      // same track behind the level, or a track that no longer fits the
+      // fighter: move them into the level-fit suit (old stays packed)
+      let has = false;
+      try { for (const arr of [npc.inventory, npc.stock]) for (const s of (arr || [])) if (s && s.id === nid) has = true; } catch (e2) { }
+      if (!has) addItem(npc, nid, 1);
+      // only auto-wear when the worn suit is behind (never strip a higher
+      // storied tier to wear a lower track suit)
+      if (cq.tier < want) npc.equipment.armor = nid;
+      return npc;
+    } catch (e) { return npc; }
+  }
+  function ensureNpcSpells(npc) {
+    // level-appropriate bonus spells + weapon art + the angel guarantee.
+    // Idempotent: augmentNpcKit only adds what the level newly earns.
+    try {
+      if (window.Entities && window.Entities.augmentNpcKit) window.Entities.augmentNpcKit(npc);
+    } catch (e) { }
+    return npc;
+  }
   function npcBonus(npc) {
-    const out = { atk: 0, matk: 0, def: 0, maxHp: 0, maxMp: 0, spd: 0 };
+    const out = { atk: 0, matk: 0, def: 0, maxHp: 0, maxMp: 0, spd: 0, maxStamina: 0 };
     try {
       if (!npc || !npc.equipment) return out;
       for (const slot of ["weapon", "armor", "trinket", "shield"]) {
@@ -2428,21 +2658,27 @@ window.Items = (() => {
     npc.matk = Math.max(1, Math.round((npc.baseMatk != null ? npc.baseMatk : npc.baseAtk) + (b.matk || 0)));
     npc.def = Math.max(0, Math.round(npc.baseDef + (b.def || 0)));
     npc.spd = Math.max(1.5, (npc.baseSpd || 3) + (b.spd || 0));
+    npc.maxStamina = Math.max(20, Math.round((npc.baseMaxStamina != null ? npc.baseMaxStamina : 100) + (b.maxStamina || 0)));
+    if (npc.stamina == null) npc.stamina = npc.maxStamina;
     if (typeof npc.hp === "number") npc.hp = Math.min(npc.maxHp, Math.max(0, npc.hp));
     if (typeof npc.mp === "number") npc.mp = Math.min(npc.maxMp, Math.max(0, npc.mp));
+    if (typeof npc.stamina === "number") npc.stamina = Math.min(npc.maxStamina, Math.max(0, npc.stamina));
     return npc;
   }
   function npcLevelUp(npc) {
-    // shared by Entities.gainXp: the base body climbs the NPC level curve
-    // (see makeNpcStatBlock — frontier levels mean real bulk), then gear is
-    // re-applied on top so nothing equipped is lost. The level number still
-    // climbs for gates even when the body is capped.
+    // shared by Entities.gainXp: gear upgrades to the new level FIRST (steel
+    // + attire), then the base body climbs the style-aware NPC curve (see
+    // makeNpcStatBlock — a sword-and-plate guard gains ATK + stamina, a
+    // robe-and-focus scholar gains MATK + mana), then level-gated spells +
+    // arts join the kit. Gear is re-applied on top so nothing is lost.
     if (!npc) return npc;
-    ensureNpcLoadout(npc);
+    try { ensureNpcBlade(npc); } catch (e) { }
+    try { ensureNpcArcher(npc); } catch (e) { }
+    try { ensureNpcArmor(npc); } catch (e) { }
     try {
       const E = window.Entities;
       if (E && E.makeNpcStatBlock) {
-        const st = E.makeNpcStatBlock(npc.lv, npc.role, 0);
+        const st = E.makeNpcStatBlock(npc.lv, npc.role, 0, { abilities: npc.abilities, weapon: (npc.equipment && npc.equipment.weapon) || null, armor: (npc.equipment && npc.equipment.armor) || null });
         if (st) {
           npc.baseMaxHp = Math.max(1, st.maxHp | 0);
           npc.baseMaxMp = Math.max(0, st.maxMp | 0);
@@ -2451,9 +2687,13 @@ window.Items = (() => {
           npc.baseDef = Math.max(0, st.def | 0);
           // no baseSdef: NPC spell defence falls back to DEF + gear
           npc.baseSpd = (typeof st.spd === "number" ? st.spd : 3);
+          npc.baseMaxStamina = Math.max(20, st.maxStamina | 0 || 100);
+          if (npc.stamina == null) npc.stamina = npc.maxStamina != null ? npc.maxStamina : st.stamina;
         }
       }
     } catch (e) {}
+    try { ensureNpcSpells(npc); } catch (e) { }
+    try { ensureNpcLoadout(npc); } catch (e) { }
     recalcNpc(npc);
     return npc;
   }
@@ -2701,7 +2941,7 @@ window.Items = (() => {
     clampUp, normNick, stackUp, stackNick, stackKey, sameVariant, variantName, findStack, countVariant, wornVariantOf, setWornVariant, hotbarBindMatches, relinkBinds, noStackLeft, gearStackMult, gearSlotLevel, gearSlotMult,
     lootChest, mobDrop, unknownTomes, ensureMasterLoot,
     ensureNpcLoadout, npcBonus, recalcNpc, npcLevelUp, countNpcItem,
-    ensureNpcBlade, npcHasWeapon, ensureNpcArcher,
+    ensureNpcBlade, npcHasWeapon, ensureNpcArcher, ensureNpcArmor, ensureNpcSpells, npcGearTierFor,
     equipOnNpc, unequipNpcSlot, giveToNpc, takeFromNpc, useNpcItem,
     teachNpcFromPlayer, setNpcAbilityEnabled, npcAbilityEnabled,
     isUndead, isDemon, isUnholy, abilityElement, wandFocus, staffFocus, wandManaMult, staffPowerMult,
@@ -2709,7 +2949,7 @@ window.Items = (() => {
     unholyWard, wardForId,
     bowStats, bowMult, arrowElement, armorResist, armorClass, armorClassFor, describeFocus, tierForLevel, randomEquipTier, gearTierCap, hybridTier, matNeedBossLv, matLocked,
     attackCadence, famDmgMult, weaponTierMult,
-    SURF_FLOOR5_GEAR, SURF_FLOOR5_MATS, SURF_FLOOR11_GEAR, SURF_FLOOR11_MATS, SURF_GATED_ALL, isSurfGated, surfFloorGate, surfGateAllows,
+    SURF_FLOOR4_GEAR, SURF_FLOOR4_MATS, SURF_FLOOR11_GEAR, SURF_FLOOR11_MATS, SURF_GATED_ALL, isSurfGated, surfFloorGate, surfGateAllows,
     HELL_ONLY, DAWNSTONE_ALL, isHellOnly, isDawnstone, lootHint,
   };
 })();

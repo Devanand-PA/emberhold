@@ -1003,7 +1003,7 @@ window.UI = (() => {
     try {
       const banner = $("techBanner");
       if (!banner) return;
-      if ($("techTitle")) $("techTitle").textContent = `Deep Art learnt: ${t.name || ""}`;
+      if ($("techTitle")) $("techTitle").textContent = `Weapon Art learnt: ${t.name || ""} (${(t && t.shallow) ? "shallow" : "deep"})`;
       if ($("techSub")) $("techSub").textContent = `${t.hint || ""}${t.active ? " (bound to a hotbar slot — see Inventory)" : " (always on from now)"}`;
       banner.hidden = false;
       clearTimeout(techBannerTimer);
@@ -1091,7 +1091,8 @@ window.UI = (() => {
         }
         let cost = ab.mp, costUnit = "mp", costName = "MP";
         try {
-          if (ab.kind === "technique" && window.Entities.effectiveStamCost) { cost = window.Entities.effectiveStamCost(p, slot.id); costUnit = "st"; costName = "stamina"; }
+          if (ab.kind === "shallow" && window.Entities.effectiveShallowMpCost) { const mp = window.Entities.effectiveShallowMpCost(p, slot.id), st = window.Entities.effectiveShallowStamCost(p, slot.id); cost = mp + "+" + st; costUnit = "mix"; costName = "MP + stamina (" + mp + " MP + " + st + " stamina)"; }
+          else if (ab.kind === "technique" && window.Entities.effectiveStamCost) { cost = window.Entities.effectiveStamCost(p, slot.id); costUnit = "st"; costName = "stamina"; }
           else cost = window.Entities.effectiveMpCost(p, slot.id);
         } catch (e) { }
         const cd = p.cooldowns && p.cooldowns[slot.id] > performance.now() / 1000;
@@ -1829,6 +1830,40 @@ window.UI = (() => {
       };
       row.appendChild(b);
     }
+    // ---- teach a spell (any NPC, party or not): your tome, their new trick ----
+    try {
+      const teachable = (window.Items.TOMES || []).filter(tid => {
+        try {
+          const it = window.Items.ITEMS[tid];
+          return it && window.Items.countItem(p, tid) > 0 && !(n.abilities || []).includes(it.teaches);
+        } catch (e2) { return false; }
+      });
+      if (teachable.length) {
+        mk("tsec", "📕 Teach a spell (uses your book)");
+        for (const tid of teachable.slice(0, 12)) {
+          const it = window.Items.ITEMS[tid];
+          const ab = window.CFG.ABILITIES[it.teaches];
+          if (!ab) continue;
+          const row = mk("trow", "");
+          row.innerHTML = `<span class="tn"></span><span></span> `;
+          try { row.querySelector(".tn").innerHTML = `${iconFor(tid)} ${normName(tid)} → ${ab.name}`; } catch (e2) { row.querySelector(".tn").textContent = tid; }
+          row.querySelectorAll("span")[1].textContent = "";
+          const b = document.createElement("button"); b.textContent = "Teach";
+          b.title = (ab.desc || "") + " (consumes your book)";
+          b.onclick = async () => {
+            const r = window.Items.teachNpcFromPlayer(p, n, tid);
+            sysBubble(r.ok ? `*${r.msg}*` : `*${r.msg}*`);
+            renderTrade(); renderChatHead();
+          };
+          row.appendChild(b);
+        }
+        if (teachable.length > 12) {
+          const more = mk("", "");
+          more.style.cssText = "opacity:0.7;font-size:12px";
+          more.textContent = `+ ${teachable.length - 12} more tomes in your pack…`;
+        }
+      }
+    } catch (eT) { }
     const hint = mk("", "");
     hint.style.cssText = "opacity:0.7;font-size:12px;margin-top:6px";
     hint.textContent = `Buy straight away: "sell me X" / "can I buy X" — or haggle: "offer 20", "how about 18?", "cheaper?", then "deal". Just a number counts as an offer on the item under discussion.`;
@@ -3360,7 +3395,7 @@ window.UI = (() => {
   // Equip buttons are wearables-only (armor/trinket). Weapons, ammo, books and
   // consumables act through hotkey-slot binds or their Use buttons instead.
   // Menu-overhaul: the old single tab row mixed VIEW switches (Pockets vs
-  // Spells vs Deep Arts vs Crafting) with FILTER chips (All vs Weapons …),
+  // Spells vs Weapon Arts vs Crafting) with FILTER chips (All vs Weapons …),
   // so new players couldn't tell tabs from items. Now VIEW is big gold pills
   // on their own row, FILTER is small quiet chips on a second row, ITEMS is
   // a counted list ("N items · tap to inspect →") and DETAILS is the sidebar.
@@ -3375,7 +3410,7 @@ window.UI = (() => {
     if (o && o.listTitle) return o.listTitle;
     if (view === "crafting") return "Recipes — pick one to brew, forge or enchant";
     if (view === "spells") return "Spells — tap to inspect, bind below";
-    if (view === "techs") return "Deep Arts — tap to inspect, bind below";
+    if (view === "techs") return "Weapon Arts — tap to inspect, bind below";
     if (o && o.mode === "npc") return "Their backpack — they use these BY THEMSELVES in fights";
     if (o && o.mode === "give") return "Your pockets — tap an item, then Give";
     if (o && o.mode === "trade") return "Your pockets — Give instantly, or Offer";
@@ -3421,7 +3456,7 @@ window.UI = (() => {
       vrow.appendChild(mkBtn(`Pockets x${counts.all || 0}`, view === "pockets", "Your carried items (filter below narrows them)", goView("pockets"), true));
       if (o.showSpells) {
         vrow.appendChild(mkBtn(`Spells x${spellCount(o.owner)}`, view === "spells", "Learned spells — bind them to hotkeys", goView("spells"), true));
-        vrow.appendChild(mkBtn(`Deep Arts x${techCount(o.owner)}`, view === "techs", "Earned arts — actives bind, passives are always on", goView("techs"), true));
+        vrow.appendChild(mkBtn(`Weapon Arts x${techCount(o.owner)}`, view === "techs", "Earned weapon arts (deep + shallow) — actives bind, passives are always on", goView("techs"), true));
       }
       if (o.showCraft) vrow.appendChild(mkBtn("Crafting", view === "crafting", "Brew, forge and enchant here", goView("crafting"), true));
       tabsEl.appendChild(vrow);
@@ -3511,7 +3546,10 @@ window.UI = (() => {
         if (it.bonus.sdef) b.push("+" + it.bonus.sdef + " SDEF");
         if (it.bonus.maxHp) b.push("+" + it.bonus.maxHp + " HP");
         if (it.bonus.maxMp) b.push("+" + it.bonus.maxMp + " MP");
+        if (it.bonus.maxStamina) b.push("+" + it.bonus.maxStamina + " ST");
         if (it.bonus.spd) b.push((it.bonus.spd > 0 ? "+" : "") + it.bonus.spd + " SPD");
+        if (it.bonus.mpRegen) b.push("+" + it.bonus.mpRegen + " MP/s");
+        if (it.bonus.stRegen) b.push("+" + it.bonus.stRegen + " ST/s");
         if (b.length) L.push(b.join(" · "));
         // gear upgrades: this COPY's work levels boost its flat stats when
         // worn — show the boosted totals, not just the base.
@@ -3521,7 +3559,7 @@ window.UI = (() => {
           const upMax = (window.Items && window.Items.GEAR_UP_MAX) || 5;
           if (lvl > 0 && it.slot !== "trinket") {
             const keys = window.Items.gearUpgradeStats(it.id);
-            const lbl = { atk: "ATK", matk: "MATK", def: "DEF", sdef: "SDEF", maxHp: "HP", maxMp: "MP", maxStamina: "ST", spd: "SPD" };
+            const lbl = { atk: "ATK", matk: "MATK", def: "DEF", sdef: "SDEF", maxHp: "HP", maxMp: "MP", maxStamina: "ST", spd: "SPD", mpRegen: "MP/s", stRegen: "ST/s" };
             const step = (window.Items && window.Items.GEAR_UP_STEP) || 0.5;
             const eb = keys.map(k => {
               const v = it.bonus[k] * (1 + lvl * step);
@@ -3676,7 +3714,7 @@ window.UI = (() => {
     }
     return c;
   }
-  function isTechAbility(id) { try { return (window.CFG.ABILITIES[id] || {}).kind === "technique"; } catch (e) { return false; } }
+  function isTechAbility(id) { try { const k = (window.CFG.ABILITIES[id] || {}).kind; return k === "technique" || k === "shallow"; } catch (e) { return false; } }
   function spellCount(p) {
     try { return (p && p.abilities ? p.abilities.filter(id => !isTechAbility(id)).length : 0); } catch (e) { return 0; }
   }
@@ -3688,11 +3726,11 @@ window.UI = (() => {
       return acts + pass;
     } catch (e) { return 0; }
   }
-  // spell list (the "spells" tab) vs technique list (the "techs" tab).
-  // Active techniques live in BOTH p.abilities (so the hotbar can cast them)
+  // spell list (the "spells" tab) vs weapon-art list (the "techs" view).
+  // Active arts live in BOTH p.abilities (so the hotbar can cast them)
   // and p.techniques (so deeds/progress know them) — the old single tab
   // rendered both lists, so every active art showed up twice. Split tabs fix
-  // it: spells show non-technique abilities only, techs show each art once.
+  // it: spells show non-weapon-art abilities only, techs show each art once.
   function renderAbilityList(listEl, sideEl, p, q, mode) {
     if (mode === "techs") { renderTechList(listEl, sideEl, p, q); return; }
     renderSpellList(listEl, sideEl, p, q);
@@ -3708,7 +3746,11 @@ window.UI = (() => {
     try { window.Icons.set(d.querySelector(".invicon"), "ability", id); } catch (e) { }
     let cost = ab.mp, costName = "MP";
     try {
-      if (ab.kind === "technique" && window.Entities.effectiveStamCost) { cost = window.Entities.effectiveStamCost(p, id); costName = "stamina"; }
+      if (ab.kind === "shallow" && window.Entities.effectiveShallowMpCost) {
+        const mp = window.Entities.effectiveShallowMpCost(p, id), st = window.Entities.effectiveShallowStamCost(p, id);
+        cost = mp + " MP + " + st + " stamina"; costName = "MP + stamina";
+      }
+      else if (ab.kind === "technique" && window.Entities.effectiveStamCost) { cost = window.Entities.effectiveStamCost(p, id); costName = "stamina"; }
       else cost = window.Entities.effectiveMpCost(p, id);
     } catch (e) { }
     d.querySelector(".invname").textContent = ab.name + " — " + ab.desc + " (" + cost + " " + costName + ")";
@@ -3717,7 +3759,7 @@ window.UI = (() => {
     // Non-technique spells can be the default attack (click / ⚔️ / Space).
     // Set ONLY here in 🎒 — pressing the spell's hotkey in-world just casts it.
     try {
-      if (ab.kind !== "technique") {
+      if (ab.kind !== "technique" && ab.kind !== "shallow") {
         let isDef = false;
         try {
           const dd = window.Items.getDefaultWeaponSlot(p);
@@ -3788,8 +3830,27 @@ window.UI = (() => {
   function renderTechList(listEl, sideEl, p, q) {
     listEl.innerHTML = "";
     const filt = (nm) => !q || (nm || "").toLowerCase().includes(q);
+    const isShallowAb = (id) => { try { return (window.CFG.ABILITIES[id] || {}).kind === "shallow"; } catch (e) { return false; } };
+    const shallowIds = (p.abilities || []).filter(id => isShallowAb(id) && filt((window.CFG.ABILITIES[id] || {}).name));
+    {
+      const h = document.createElement("div");
+      h.className = "invempty";
+      h.textContent = "⚔️ Weapon Arts (deep + shallow) — actives bind below:";
+      listEl.appendChild(h);
+    }
+    if (shallowIds.length) {
+      const hs = document.createElement("div");
+      hs.className = "invempty";
+      hs.textContent = "🌊 Shallow (light — a little MP + a little stamina):";
+      listEl.appendChild(hs);
+      for (const id of shallowIds) { try { spellRow(listEl, p, id, filt); } catch (e) { } }
+      const h2 = document.createElement("div");
+      h2.className = "invempty";
+      h2.textContent = "⚔️ Deep:";
+      listEl.appendChild(h2);
+    }
     for (const id of (p.abilities || [])) {
-      if (!isTechAbility(id)) continue;
+      if (!isTechAbility(id) || isShallowAb(id)) continue;
       try { spellRow(listEl, p, id, filt); } catch (e) { }
     }
     try {
@@ -3802,14 +3863,14 @@ window.UI = (() => {
         d.style.cursor = "default";
         d.innerHTML = '<span class="invicon"></span><span class="invname"></span>';
         try { window.Icons.set(d.querySelector(".invicon"), "ability", id); } catch (e) { }
-        d.querySelector(".invname").textContent = tt.name + " — " + (tt.hint || tt.desc || "deed-learnt Deep Art") + " (always on)";
+        d.querySelector(".invname").textContent = tt.name + " — " + (tt.hint || tt.desc || "deed-learnt weapon art") + " (always on)";
         listEl.appendChild(d);
       }
       const locked = Object.keys(T).filter(id => !((p.techniques || []).includes(id)) && filt(T[id].name));
       if (locked.length) {
         const lh = document.createElement("div");
         lh.className = "invempty";
-        lh.textContent = "Latent Deep Arts (learnt by deeds — progress below):";
+        lh.textContent = "Latent Weapon Arts (learnt by deeds — progress below):";
         listEl.appendChild(lh);
       }
       for (const id of locked) {
@@ -3819,6 +3880,7 @@ window.UI = (() => {
           const req = tt.req || {};
           if (req.el) for (const k of Object.keys(req.el)) bits.push(k + " " + Math.min(req.el[k], Math.floor(((p.techXp.el || {})[k] || 0))) + "/" + req.el[k]);
           if (req.fam) for (const k of Object.keys(req.fam)) bits.push(k + " " + Math.min(req.fam[k], Math.floor(((p.techXp.fam || {})[k] || 0))) + "/" + req.fam[k]);
+          if (req.anyFam) bits.push(Object.keys(req.anyFam).map(k => k + " " + Math.min(req.anyFam[k], Math.floor(((p.techXp.fam || {})[k] || 0))) + "/" + req.anyFam[k]).join(" or ") + " (any)");
           if (req.kills) bits.push("kills " + Math.min(req.kills, p.techXp.kills || 0) + "/" + req.kills);
           if (req.undeadKills) bits.push("undead " + Math.min(req.undeadKills, p.techXp.undeadKills || 0) + "/" + req.undeadKills);
           if (req.uses) for (const k of Object.keys(req.uses)) {
@@ -3851,7 +3913,7 @@ window.UI = (() => {
     sideEl.innerHTML = "";
     const e = document.createElement("div");
     e.className = "invempty";
-    e.textContent = q ? "Matching Deep Arts." : "⚔️ Deep Arts are earned by deeds, not books — actives bind like spells, passives are always on.";
+    e.textContent = q ? "Matching Weapon Arts." : "⚔️ Weapon Arts are earned by deeds, not books — deep and shallow actives bind like spells, passives are always on.";
     sideEl.appendChild(e);
   }
  // craft recipe list (the "craftables" tab content for the player inventory)
@@ -4419,7 +4481,7 @@ window.UI = (() => {
       owner: p, mode: "player", state: invState, tabs: INV_TABS, showCraft: true, showSpells: true,
       onChange: () => saveAndRefreshInv(),
     });
-    // spells & Deep Arts live on their own ✨ Spells / ⚔️ Deep Arts tabs now (rendered by
+    // spells & weapon arts live on their own ✨ Spells / ⚔️ Weapon Arts view now (rendered by
     // paintBrowserListSide) — keep the old section hidden, never rendered.
     const abs = $("invAbilities");
     if (abs) { abs.innerHTML = ""; abs.hidden = true; }
@@ -4517,9 +4579,9 @@ window.UI = (() => {
         sl.appendChild(d);
       }
     }
-    // skill trees: Attributes | Weapons | Guard | Spells | Deep Arts tabs, gated node cards
+    // skill trees: Attributes | Weapons | Guard | Spells | Weapon Arts tabs, gated node cards
     try { paintCharTabs(p); } catch (e) { }
-    const showStats = charTab === "stats", showWeapons = charTab === "weapons", showGuard = charTab === "guard", showSpells = charTab === "spells", showTechs = charTab === "techs", showTaming = charTab === "taming", showAff = charTab === "afflictions";
+    const showStats = charTab === "stats", showWeapons = charTab === "weapons", showGuard = charTab === "guard", showSpells = charTab === "spells", showArts = charTab === "arts", showTaming = charTab === "taming", showAff = charTab === "afflictions";
     try {
       const intro = $("charIntro");
       if (intro) {
@@ -4543,14 +4605,14 @@ window.UI = (() => {
             }
             if (showSpells) {
               let n = leg;
-              try { for (const id of (p.abilities || [])) { const k = (window.CFG.ABILITIES[id] || {}).kind; if (k !== "technique") n += E.treePoints(p, id) | 0; } } catch (e) { }
+              try { for (const id of (p.abilities || [])) { const k = (window.CFG.ABILITIES[id] || {}).kind; if (k !== "technique" && k !== "shallow") n += E.treePoints(p, id) | 0; } } catch (e) { }
               return n;
             }
-            if (showTechs) {
+            if (showArts) {
               let n = leg;
               try {
                 const T = (window.CFG && window.CFG.TECHNIQUES) || {};
-                for (const id of (p.abilities || [])) { if ((window.CFG.ABILITIES[id] || {}).kind === "technique") n += E.treePoints(p, id) | 0; }
+                for (const id of (p.abilities || [])) { const k = (window.CFG.ABILITIES[id] || {}).kind; if (k === "technique" || k === "shallow") n += E.treePoints(p, id) | 0; }
                 for (const id of (p.techniques || [])) { if (T[id] && !T[id].active) n += E.treePoints(p, id) | 0; }
               } catch (e) { }
               return n;
@@ -4569,7 +4631,7 @@ window.UI = (() => {
           weapons: `🗡️ Weapon mastery — each tree earns its own points by fighting (${ptsHere} to spend here). Pick a weapon below, then a node.`,
           guard: `🛡️ Guard — armor, robes, kasaya and habitus earn their own points (${ptsHere} to spend here). Stoneskin and Wardweave learn by taking hits; Ascetic by dealing physical hits in kasaya; Devotion by dealing spell hits in a habitus.`,
           spells: `✨ Spell mastery — each spell earns its own points by casting (${ptsHere} to spend here). Pick a spell below, then a node.`,
-          techs: `⚔️ Deep Arts — each art earns its own points by deed and use (${ptsHere} to spend here). Actives bind like spells; passives are always on.`,
+          arts: `⚔️ Weapon Arts — deep + shallow (${ptsHere} to spend here). Each art earns its own points by casting (deep: 10 casts = 1 point; shallow: 5 casts = 1 point). Actives bind like spells; passives are always on.`,
           taming: `🐾 Taming — each rank bends more beasts (${ptsHere} to spend here). Tame to earn.`,
           afflictions: `☠️ Afflictions — each ailment earns its own points by afflicting foes (${ptsHere} to spend here). Blind harder, slow deeper, exploit the suffering.`,
         };
@@ -4588,8 +4650,10 @@ window.UI = (() => {
       if ($("guardList")) $("guardList").hidden = !showGuard;
       if ($("magicH")) $("magicH").hidden = !showSpells;
       if ($("magicList")) $("magicList").hidden = !showSpells;
-      if ($("techH")) $("techH").hidden = !showTechs;
-      if ($("techList")) $("techList").hidden = !showTechs;
+      if ($("techH")) $("techH").hidden = !showArts;
+      if ($("techList")) $("techList").hidden = !showArts;
+      if ($("shallowH")) $("shallowH").hidden = !showArts;
+      if ($("shallowList")) $("shallowList").hidden = !showArts;
       if ($("tameH")) $("tameH").hidden = !showTaming;
       if ($("tameList")) $("tameList").hidden = !showTaming;
       if ($("affH")) $("affH").hidden = !showAff;
@@ -4598,17 +4662,18 @@ window.UI = (() => {
     if (showWeapons) { try { renderWeaponTrees(p); } catch (e) { } }
     if (showGuard) { try { renderGuardTrees(p); } catch (e) { } }
     if (showSpells) { try { renderSpellTrees(p); } catch (e) { } }
-    if (showTechs) { try { renderTechTrees(p); } catch (e) { } }
+    if (showArts) { try { renderTechTrees(p); } catch (e) { } try { renderShallowTrees(p); } catch (e) { } }
     if (showTaming) { try { renderTamingTrees(p); } catch (e) { } }
     if (showAff) { try { renderAfflictionTrees(p); } catch (e) { } }
   }
 
   // ---------- skill-tree state + renderers ----------
-  let charTab = "stats"; // 'stats' | 'weapons' | 'guard' | 'spells' | 'techs' | 'taming' | 'afflictions'
+  let charTab = "stats"; // 'stats' | 'weapons' | 'guard' | 'spells' | 'arts' | 'taming' | 'afflictions'
   let charWeaponSel = "sword";
   let charGuardSel = "armor";
   let charSpellSel = null;
   let charTechSel = null;
+  let charShallowSel = null;
   let charAffSel = "status_poison";
   const SPELL_MASTERY_DESC = {
     fireball: "Longer burn, +range, faster cooldown",
@@ -4654,6 +4719,18 @@ window.UI = (() => {
     locust_swarm: "Wider swarm (7 tiles), longer feast (16s)",
     thundering_crack: "Wider crack (6 tiles), tailwind lasts 12s",
     whirlwind_slinger: "Wider spiral (3.5 tiles), longer spin (7s), harder hits",
+    flowing_strikes: "Five flowing blows, longer slow",
+    faux_chop: "Crueler bleed",
+    one_armed_guard: "Longer guard (4s)",
+    glancing_arc: "Harder arc",
+    splinter_hewn: "Deeper sunder",
+    wasp_sting: "Stronger venom",
+    knockback_tap: "Longer stun",
+    short_lunge: "Harder lunge",
+    twin_nock: "A third arrow",
+    wrist_snap: "Longer stun",
+    palm_star: "A third star",
+    brace_bash: "Deeper sunder",
   };
   // Codex reads this live so mastery notes stay in sync with balance edits.
   function masteryDesc(abId) { try { return SPELL_MASTERY_DESC[abId] || ""; } catch (e) { return ""; } }
@@ -4676,10 +4753,11 @@ window.UI = (() => {
     };
     let wIds = [];
     try { wIds = Object.keys((window.CFG && window.CFG.SKILL_TREES) || {}).filter(id => id !== "armor" && id !== "robe" && id !== "kasaya" && id !== "habitus"); } catch (e) { }
-    let sIds = [], tIds = [];
+    let sIds = [], tIds = [], shIds = [];
     try {
       const isTech = (id) => { try { return (window.CFG.ABILITIES[id] || {}).kind === "technique"; } catch (e) { return false; } };
-      sIds = (p.abilities || []).filter(id => !isTech(id));
+      sIds = (p.abilities || []).filter(id => !isTech(id) && (window.CFG.ABILITIES[id] || {}).kind !== "shallow");
+      shIds = (p.abilities || []).filter(id => { try { return (window.CFG.ABILITIES[id] || {}).kind === "shallow"; } catch (e) { return false; } });
       const T = (window.CFG && window.CFG.TECHNIQUES) || {};
       const pass = (p.techniques || []).filter(id => T[id] && !T[id].active);
       tIds = [...(p.abilities || []).filter(isTech), ...pass];
@@ -4690,7 +4768,7 @@ window.UI = (() => {
       ["weapons", "🗡️ Weapons", spendIn(wIds)],
       ["guard", "🛡️ Guard", spendIn(["armor", "robe", "kasaya", "habitus"])],
       ["spells", "✨ Spells", spendIn(sIds)],
-      ["techs", "⚔️ Deep Arts", spendIn(tIds)],
+      ["arts", "⚔️ Weapon Arts", spendIn([...tIds, ...shIds])],
       ["taming", "🐾 Taming", spendIn(["taming"])],
       ["afflictions", "☠️ Afflictions", spendIn(aIds)]];
     for (const triple of defs) {
@@ -4768,7 +4846,7 @@ window.UI = (() => {
     // Which technique trees ride this weapon tree (explicit, per request).
     try {
       const famTech = Object.keys((window.CFG && window.CFG.TECHNIQUES) || {}).filter(id => {
-        try { return window.Entities.techWeaponFam ? (window.Entities.techWeaponFam(id) === charWeaponSel || (charWeaponSel === "shuriken" && (((window.CFG.TECHNIQUES[id].req || {}).fam || {}).thrown != null))) : ((window.CFG.TECHNIQUES[id].req || {}).fam || {})[charWeaponSel] != null; } catch (e) { return false; }
+        try { if (window.Entities.techWeaponFams && (window.Entities.techWeaponFams(id) || []).indexOf(charWeaponSel) >= 0) return true; return window.Entities.techWeaponFam ? (window.Entities.techWeaponFam(id) === charWeaponSel || (charWeaponSel === "shuriken" && (((window.CFG.TECHNIQUES[id].req || {}).fam || {}).thrown != null))) : ((window.CFG.TECHNIQUES[id].req || {}).fam || {})[charWeaponSel] != null; } catch (e) { return false; }
       });
       if (charWeaponSel === "parry") {
         const d = document.createElement("div");
@@ -4781,7 +4859,7 @@ window.UI = (() => {
         const names = famTech.map(id => {
           try { const t = window.CFG.TECHNIQUES[id]; return (t.name || id); } catch (e) { return id; }
         }).join(", ");
-        d.textContent = "Empowers Deep Arts: " + (names || "Stalwart Reflector") + ". Stalwart Reflector requires a shield equipped and inherits every unlocked rank of this tree. Shield parries cut blows to 1/20 x shield tier — and a worn shield guards passively (+DEF/+SDEF).";
+        d.textContent = "Empowers Weapon Arts: " + (names || "Stalwart Reflector") + ". Stalwart Reflector requires a shield equipped and inherits every unlocked rank of this tree. Shield parries cut blows to 1/20 x shield tier — and a worn shield guards passively (+DEF/+SDEF).";
         list.appendChild(d);
       } else if (famTech.length) {
         const names = famTech.map(id => {
@@ -4789,7 +4867,7 @@ window.UI = (() => {
         }).join(", ");
         const d = document.createElement("div");
         d.className = "invempty";
-        d.textContent = "Empowers Deep Arts: " + names + ". Actives require this weapon as your default weapon, gain every unlocked rank of this tree, and scale with the wielded weapon's strength (iron > rusted, better bow > worse bow). Passives only trigger while this weapon is wielded.";
+        d.textContent = "Empowers Weapon Arts: " + names + ". Actives require this weapon as your default weapon, gain every unlocked rank of this tree (multi-weapon arts like Faux Chop gain EVERY listed weapon tree at once), and scale with the wielded weapon's strength (iron > rusted, better bow > worse bow). Deep arts ALSO gain their linked spell + shallow-art trees (see each art). Passives only trigger while this weapon is wielded.";
         list.appendChild(d);
       }
     } catch (e) { }
@@ -4874,7 +4952,7 @@ window.UI = (() => {
     if (!ml) return;
     ml.innerHTML = "";
     const isCata = (id) => { try { return (window.CFG.ABILITIES[id] || {}).kind === "cataclysm"; } catch (e) { return false; } };
-    const spellIds = p.abilities.filter(id => { try { const k = (window.CFG.ABILITIES[id] || {}).kind; return k !== "technique" && k !== "cataclysm"; } catch (e) { return true; } });
+    const spellIds = p.abilities.filter(id => { try { const k = (window.CFG.ABILITIES[id] || {}).kind; return k !== "technique" && k !== "shallow" && k !== "cataclysm"; } catch (e) { return true; } });
     const cataIds = p.abilities.filter(isCata);
     if (!spellIds.length && !cataIds.length) { const e = document.createElement("div"); e.className = "invempty"; e.textContent = "No spells yet - read spellbooks."; ml.appendChild(e); return; }
     const allIds = [...spellIds, ...cataIds];
@@ -4892,11 +4970,23 @@ window.UI = (() => {
     // learnt passive techniques have trees of their own (deeds, not spellbooks)
     const techPassiveIds = (p.techniques || []).filter(id => T[id] && !T[id].active);
     const techActiveIds = p.abilities.filter(isTech);
-    if (!techActiveIds.length && !techPassiveIds.length) { const e = document.createElement("div"); e.className = "invempty"; e.textContent = "No Deep Arts yet - they are earned by deeds in battle, not bought."; tl.appendChild(e); return; }
+    if (!techActiveIds.length && !techPassiveIds.length) { const e = document.createElement("div"); e.className = "invempty"; e.textContent = "No deep weapon arts yet - they are earned by deeds in battle, not bought."; tl.appendChild(e); return; }
     const allIds = [...techActiveIds, ...techPassiveIds];
     if (!allIds.includes(charTechSel)) charTechSel = allIds[0];
-    renderTreeSection(p, tl, "Deep Arts", "Earned by deeds - all instant. Actives ride Strength, like strikes. Most require their weapon as your default weapon (bare fists for Iron Palm); thrown arts need only shurikens in your pack. Shield arts need a shield equipped. Actives also gain their weapon tree's ranks and scale with weapon strength.", techActiveIds, "tech");
-    renderTreeSection(p, tl, "Passive Deep Arts", "Always on while their weapon is wielded - open the fight the right way and they bite.", techPassiveIds, "tech");
+    renderTreeSection(p, tl, "Deep Weapon Arts", "Earned by deeds - all instant. Actives ride Strength, like strikes. Most require their weapon as your default weapon (bare fists for Iron Palm); thrown arts need only shurikens in your pack. Shield arts need a shield equipped. Actives also gain their weapon tree's ranks and scale with weapon strength — PLUS every rank of their linked spell tree(s) and matching shallow art(s) (Holy Sword reads Smite; Avalanche reads Frostbite/Glacier; each art lists its links below).", techActiveIds, "tech");
+    renderTreeSection(p, tl, "Passive Weapon Arts", "Always on while their weapon is wielded - open the fight the right way and they bite.", techPassiveIds, "tech");
+  }
+  // Shallow weapon arts render in the same Weapon Arts tab below the deep trees: light dual-cost
+  // arts the hero casts, each earning its own tree by casting.
+  function renderShallowTrees(p) {
+    const sl = $("shallowList");
+    if (!sl) return;
+    sl.innerHTML = "";
+    const isShallow = (id) => { try { return (window.CFG.ABILITIES[id] || {}).kind === "shallow"; } catch (e) { return false; } };
+    const shallowIds = (p.abilities || []).filter(isShallow);
+    if (!shallowIds.length) { const e = document.createElement("div"); e.className = "invempty"; e.textContent = "No shallow weapon arts yet - they are earned by light deeds in battle."; sl.appendChild(e); return; }
+    if (!shallowIds.includes(charShallowSel)) charShallowSel = shallowIds[0];
+    renderTreeSection(p, sl, "Shallow Weapon Arts", "Light arts: a little MP + a little stamina per cast, usable far more often than Deep Arts. Most require their weapon as your default weapon (bare fists for Flowing Strikes and One-Armed Guard); thrown arts need only shurikens in your pack. Shield arts need a shield equipped. Arts listing several families (Faux Chop: axe/sword/dagger) gain EVERY listed weapon tree's ranks at once.", shallowIds, "shallow");
   }
   // Taming lives in its own tab now (🐾 next to ⚔️): alongside caps, kind +
   // level gates, and the deed counter toward 🦗 Locust Swarm.
@@ -5007,10 +5097,10 @@ window.UI = (() => {
   // selection ("spell" -> charSpellSel, "tech" -> charTechSel).
   function renderTreeSection(p, ml, title, hint, ids, which) {
     if (!ids.length) return;
-    const isTechTab = which === "tech";
-    const selId = () => (isTechTab ? charTechSel : charSpellSel);
-    const setSelId = (v) => { if (isTechTab) charTechSel = v; else charSpellSel = v; };
-    const rerender = () => { if (isTechTab) renderTechTrees(p); else renderSpellTrees(p); };
+    const isTechTab = which === "tech" || which === "shallow";
+    const selId = () => (which === "tech" ? charTechSel : which === "shallow" ? charShallowSel : charSpellSel);
+    const setSelId = (v) => { if (which === "tech") charTechSel = v; else if (which === "shallow") charShallowSel = v; else charSpellSel = v; };
+    const rerender = () => { if (which === "tech") renderTechTrees(p); else if (which === "shallow") renderShallowTrees(p); else renderSpellTrees(p); };
     const h = document.createElement("div");
     h.className = "stier";
     h.textContent = title;
@@ -5085,10 +5175,11 @@ window.UI = (() => {
         const ab2 = window.CFG.ABILITIES[S];
         const mult = window.Entities.spellPowerMult(p, S);
         const techS = !!(ab2 && ab2.kind === "technique");
-        const cost = techS && window.Entities.effectiveStamCost ? window.Entities.effectiveStamCost(p, S) : window.Entities.effectiveMpCost(p, S);
+        const shallowS = !!(ab2 && ab2.kind === "shallow");
+        const cost = techS && window.Entities.effectiveStamCost ? window.Entities.effectiveStamCost(p, S) : shallowS && window.Entities.effectiveShallowMpCost ? window.Entities.effectiveShallowMpCost(p, S) + " MP + " + window.Entities.effectiveShallowStamCost(p, S) + " stamina" : window.Entities.effectiveMpCost(p, S);
         let extra = "";
         try {
-          if (ab2 && ab2.kind === "technique") {
+          if (ab2 && (ab2.kind === "technique" || ab2.kind === "shallow")) {
             const fam = window.Entities.techWeaponFam ? window.Entities.techWeaponFam(S) : null;
             if (S === "locust_swarm") {
               extra = " Instant; needs no weapon wielded — a leech-cloud of untouchable locusts orbits you for 12s (Mastery: 16s, 7 tiles), draining nearby foes to feed you and your allies. Earn Locust Swarm ranks by casting it.";
@@ -5097,9 +5188,33 @@ window.UI = (() => {
             } else if (fam === "shield") {
               extra = " Instant mirror guard (2s, Mastery 3s): every attack rebounds at half power while you take nothing. Requires a shield equipped; inherits Shieldwork ranks.";
             } else {
-              let wname = fam || "?";
-              try { if (window.CFG.SKILL_TREES && window.CFG.SKILL_TREES[fam]) wname = window.CFG.SKILL_TREES[fam].name; else if (fam === "unarmed") wname = "Martial Arts (bare fists)"; } catch (e) { }
-              extra = " Instant; requires " + (fam === "unarmed" ? "bare fists (default slot empty)" : "a " + fam + " as your default weapon") + "; inherits " + wname + " ranks + scales with weapon strength.";
+              let fams = [];
+              try { if (window.Entities.techWeaponFams) fams = window.Entities.techWeaponFams(S) || []; } catch (e) { }
+              if (!fams.length && fam) fams = [fam];
+              const wnames = fams.map((f) => {
+                try {
+                  if (window.CFG.SKILL_TREES && window.CFG.SKILL_TREES[f]) return window.CFG.SKILL_TREES[f].name;
+                  if (f === "unarmed") return "Martial Arts (bare fists)";
+                } catch (e) { }
+                return f || "?";
+              });
+              const wlabel = wnames.length > 1 ? wnames.join(" + ") : (wnames[0] || "?");
+              const req0 = fams.length > 1 ? ("an axe, sword or dagger as your default weapon".replace("axe, sword or dagger", fams.join(", "))) : null;
+              extra = " Instant; requires " + (req0 || (fams[0] === "unarmed" ? "bare fists (default slot empty)" : "a " + (fams[0] || fam) + " as your default weapon")) + "; inherits " + wlabel + " ranks" + (fams.length > 1 ? " (ALL at once)" : "") + " + scales with weapon strength.";
+              try {
+                const SI = (window.CFG && window.CFG.TECH_SPELL_INHERIT && window.CFG.TECH_SPELL_INHERIT[S]) || [];
+                if (SI.length) {
+                  const nm = (id) => { try { const a = window.CFG.ABILITIES[id]; return (a && a.name) || id; } catch (e) { return id; } };
+                  extra += " Empowered by " + SI.map(nm).join(" + ") + " (gains every unlocked rank).";
+                }
+              } catch (e) { }
+              try {
+                const HI = (window.CFG && window.CFG.TECH_SHALLOW_INHERIT && window.CFG.TECH_SHALLOW_INHERIT[S]) || [];
+                if (HI.length) {
+                  const nm = (id) => { try { const a = window.CFG.ABILITIES[id]; return (a && a.name) || id; } catch (e) { return id; } };
+                  extra += " Deepened by shallow " + (HI.length > 1 ? "arts " : "art ") + HI.map(nm).join(" + ") + " (gains every unlocked rank).";
+                }
+              } catch (e) { }
             }
             if (S === "shadow_disciples") {
               try {
@@ -5884,6 +5999,16 @@ window.UI = (() => {
               ctx.beginPath(); ctx.arc(sp[0], sp[1], 2.5, 0, 7); ctx.fill();
             }
           } catch (e) { }
+          // their beasts (tamed, bought, lent) dot the map beside them
+          try {
+            for (const v of (r.tames || [])) {
+              if (!v || v.x == null || v.y == null) continue;
+              const sp = _rInD ? w2s(_rx, _ry) : w2s(v.x, v.y);
+              if (sp[0] < -10 || sp[1] < -10 || sp[0] > W + 10 || sp[1] > H + 10) continue;
+              ctx.fillStyle = isA ? "#5dd68a" : "#4da3ff";
+              ctx.beginPath(); ctx.arc(sp[0], sp[1], 1.8, 0, 7); ctx.fill();
+            }
+          } catch (e) { }
           // their living shadow clones: same pin as the hero, never labeled —
           // the copies are indistinguishable on your map too
           try {
@@ -6613,6 +6738,13 @@ window.UI = (() => {
               dot(q.x, q.y, allied ? "#5dd68a" : "#4da3ff", 1.8);
             }
           } catch (e) { }
+          try {
+            for (const v of (r.tames || [])) {
+              if (!v || v.x == null || v.y == null) continue;
+              if (Math.abs(v.x - p.x) > range || Math.abs(v.y - p.y) > range) continue;
+              dot(v.x, v.y, allied ? "#5dd68a" : "#4da3ff", 1.5);
+            }
+          } catch (e) { }
           // their living shadow clones: same dot as the hero, no label —
           // on your map the copies are indistinguishable too
           try {
@@ -7056,6 +7188,7 @@ window.UI = (() => {
         renderGuild();
       })(q.gid, q.title);
       btns.appendChild(ab);
+      if ((q.kind === "kill" || q.kind === "clear" || q.kind === "fetch") && !q.commissionId) { try { appendQuestShareBtn(btns, { sys: "g", gid: q.gid }); } catch (e) {} }
       row.appendChild(btns);
       cList.appendChild(row);
     }
@@ -8619,13 +8752,16 @@ window.UI = (() => {
           title.textContent = "Last blows:";
           title.style.fontWeight = "900";
           box.appendChild(title);
-          for (const h of hits) {
-            const row = document.createElement("div");
-            const who = h.lv ? `${h.src} (lv.${h.lv})` : String(h.src || "the wilds");
-            const how = h.magic ? (h.el ? `${h.el} spell` : "spell") : "strike";
-            row.textContent = `• ${who} — ${how}: ${h.dmg}`;
-            box.appendChild(row);
-          }
+         for (const h of hits) {
+           const row = document.createElement("div");
+           const who = h.lv ? `${h.src} (lv.${h.lv})` : String(h.src || "the wilds");
+            // arrows used to read as "strike" (everything non-magic did), which
+            // hid the real vehicle — a 1580 bowshot looked like a claw swipe.
+            const mv = String(h.mv || "");
+            const how = h.magic ? (h.el ? `${h.el} spell` : "spell") : (/bow|arrow/i.test(mv) ? "arrow" : "strike");
+           row.textContent = `• ${who} — ${how}: ${h.dmg}`;
+           box.appendChild(row);
+         }
         }
       }
     } catch (e) { }
@@ -9384,7 +9520,7 @@ window.UI = (() => {
         box.innerHTML = "";
         const ids = Object.keys(window.CFG.ABILITIES || {}).filter(id => {
           const a = window.CFG.ABILITIES[id];
-          return a && a.kind !== "technique";
+          return a && a.kind !== "technique" && a.kind !== "shallow";
         }).sort((a, b) => String(window.CFG.ABILITIES[a].name).localeCompare(String(window.CFG.ABILITIES[b].name)));
         for (const id of ids) {
           const a = window.CFG.ABILITIES[id];
@@ -9433,7 +9569,7 @@ window.UI = (() => {
               toast("Unlearned " + (window.CFG.TECHNIQUES[tid].name || tid) + ".", 2500);
             } else {
               practiceLearnTechQuiet(p, tid);
-              toast("Deep Art learnt: " + (window.CFG.TECHNIQUES[tid].name || tid) + "!", 2500);
+              toast((((window.CFG.TECHNIQUES[tid] || {}).shallow) ? "Shallow Art" : "Deep Art") + " learnt: " + (window.CFG.TECHNIQUES[tid].name || tid) + "!", 2500);
             }
             try { window.Entities.ensureProgression(p); window.Entities.recalcDerived(p, true); } catch (e) { }
             try { window.Game.saveGame(true); } catch (e) { }
@@ -10716,26 +10852,44 @@ window.UI = (() => {
             qr.appendChild(chip);
           }
           el.appendChild(qr);
-          // per-traveler party rosters: who walks with whom (name lv + hp)
+          // per-traveler party rosters: who walks with whom (name lv + hp),
+          // plus their beasts (tamed, bought, lent — name lv + hp)
           try {
             const pr = document.createElement("div");
             pr.style.cssText = "margin-top:4px;display:flex;flex-direction:column;gap:2px;font-size:12px;opacity:0.9";
             for (const r of remotes) {
               const party = Array.isArray(r.party) ? r.party : null;
-              if (!party || !party.length) continue;
-              const line = document.createElement("div");
-              let bits = "";
-              try {
-                bits = party.map((q) => {
-                  const nm = String((q && q.n) || "Ally").slice(0, 16);
-                  const lv = Math.max(1, (q && q.lv) | 0 || 1);
-                  const hp = Math.max(0, Math.round(Number((q && q.hp) || 0)));
-                  const mh = Math.max(1, Math.round(Number((q && q.maxHp) || 0) || 40));
-                  return nm + " lv" + lv + " ❤" + hp + "/" + mh;
-                }).join(" · ");
-              } catch (e2) { bits = ""; }
-              line.textContent = "👥 " + (r.name || "Traveler") + "'s party (" + party.length + "): " + bits;
-              pr.appendChild(line);
+              if (party && party.length) {
+                const line = document.createElement("div");
+                let bits = "";
+                try {
+                  bits = party.map((q) => {
+                    const nm = String((q && (q.name || q.n)) || "Ally").slice(0, 16);
+                    const lv = Math.max(1, (q && q.lv) | 0 || 1);
+                    const hp = Math.max(0, Math.round(Number((q && q.hp) || 0)));
+                    const mh = Math.max(1, Math.round(Number((q && q.maxHp) || 0) || 40));
+                    return nm + " lv" + lv + " ❤" + hp + "/" + mh;
+                  }).join(" · ");
+                } catch (e2) { bits = ""; }
+                line.textContent = "👥 " + (r.name || "Traveler") + "'s party (" + party.length + "): " + bits;
+                pr.appendChild(line);
+              }
+              const tames = Array.isArray(r.tames) ? r.tames : null;
+              if (tames && tames.length) {
+                const tline = document.createElement("div");
+                let tb = "";
+                try {
+                  tb = tames.map((v) => {
+                    const nm = String((v && (v.name || v.n)) || "Beast").slice(0, 16);
+                    const lv = Math.max(1, (v && v.lv) | 0 || 1);
+                    const hp = Math.max(0, Math.round(Number((v && v.hp) || 0)));
+                    const mh = Math.max(1, Math.round(Number((v && v.maxHp) || 0) || 40));
+                    return nm + " lv" + lv + " ❤" + hp + "/" + mh;
+                  }).join(" · ");
+                } catch (e2) { tb = ""; }
+                tline.textContent = "🐴 " + (r.name || "Traveler") + "'s beasts (" + tames.length + "): " + tb;
+                pr.appendChild(tline);
+              }
             }
             if (pr.childNodes.length) el.appendChild(pr);
           } catch (e2) {}
@@ -11279,7 +11433,7 @@ window.UI = (() => {
       let n = 0;
       try {
         for (const id of Object.keys(window.CFG.ABILITIES || {})) {
-          if (window.CFG.ABILITIES[id].kind === "technique") continue;
+          if (window.CFG.ABILITIES[id].kind === "technique" || window.CFG.ABILITIES[id].kind === "shallow") continue;
           if ((p.abilities || []).includes(id)) continue;
           try { window.Items.learnSpell(p, id); n++; } catch (e) { }
         }
@@ -12795,10 +12949,10 @@ window.UI = (() => {
           d.textContent = "• " + s.text + keyTxt;
           list.appendChild(d);
         }
-        const hint = document.createElement("div");
-        hint.className = "invempty";
-        hint.textContent = "Guided: a golden arrow shows every key and menu, dimming the rest. After each lesson the 📜 Quests (J) log reopens — check it anytime.";
-        list.appendChild(hint);
+       const hint = document.createElement("div");
+       hint.className = "invempty";
+        hint.textContent = "Guided: a golden arrow shows every key and menu, dimming the rest. The log stays closed — check 📜 Quests (J) anytime to review lessons.";
+       list.appendChild(hint);
       }
       p.tutorialOffered = true;
       try { window.Game.saveGame(true); } catch (e) { }
@@ -13069,16 +13223,33 @@ window.UI = (() => {
         return { el: (b && tutVisible(b)) ? b : null, center: !(b && tutVisible(b)), key: "E", tip: "Walk to a glowing 🌿 plant until “press E” shows, then press E (or tap the E button)." };
       }
       if (stepId === "craft") {
-        if (!invIsOpen) {
-          const b = $("phInvBtn");
-          return { el: (b && tutVisible(b)) ? b : null, center: !(b && tutVisible(b)), key: "I → 🔨 Crafting", tip: "Your pack brews and whittles. Press I → 🔨 Crafting tab → Craft anything." };
-        }
-        // crafting tab already open — spotlight the first Craft button itself
-        try {
-          const list = $("invList");
-          if (list) {
-            const cb = [...list.querySelectorAll("button")].find(b => /^craft$/i.test((b.textContent || "").trim()));
-            if (cb && tutVisible(cb)) return { el: cb, key: "🔨 Craft", tip: "Tap Craft — torches take a single 🪵 wood, potions brew from 3 🌿 herbs." };
+       if (!invIsOpen) {
+         const b = $("phInvBtn");
+         return { el: (b && tutVisible(b)) ? b : null, center: !(b && tutVisible(b)), key: "I → 🔨 Crafting", tip: "Your pack brews and whittles. Press I → 🔨 Crafting tab → Craft anything." };
+       }
+       // crafting view open — spotlight the WHITTLE TORCHES row itself
+      try {
+        const list = $("invList");
+        if (list) {
+           // Torch lesson: spotlight the WHITTLE TORCHES row's Craft button
+           // (never the first recipe in the list — Base-building sorts above
+           // Fieldcraft, so the old "first Craft button" pointed at bricks).
+           try {
+             const rows = [...list.querySelectorAll(".invrow")];
+              // Match the RECIPE row only ("Whittle Torches"), never a pocket
+              // "Torch ×N" row — pockets view has no Whittle text, so this
+              // also proves the Crafting view is actually open.
+              const torchRow = rows.find(r => /whittle/i.test(r.textContent || "") && r.querySelector("button"));
+              if (torchRow) {
+                // The torch recipe sits below the long Base-building group, so
+                // it is usually scrolled out of sight when the tab opens. Bring
+                // it into view and spotlight it anyway — gating on visibility
+                // here is what fell back to the (visible) brick recipe.
+                try { torchRow.scrollIntoView({ block: "center", inline: "nearest" }); } catch (e3) { }
+                const tb = torchRow.querySelector("button");
+                return { el: tb || torchRow, key: "🔨 Craft", tip: "Tap Craft on Whittle Torches — it takes a single 🪵 wood." };
+              }
+            } catch (e2) { }
           }
         } catch (e) { }
         try {
@@ -13261,6 +13432,132 @@ window.UI = (() => {
       return out;
     } catch (e) { return []; }
   }
+  // ---------- ally quest sharing UI ----------
+  // Online allies = mutual pact + fresh presence. Only they can be offered
+  // quests, and only they can offer to us (enforced again on receipt).
+  function questShareAllies() {
+    try {
+      if (!window.MP || !window.MP.allyList || !window.MP.getRemotes) return [];
+      const live = {};
+      for (const r of (window.MP.getRemotes() || [])) {
+        try { live[String(r.remoteHash || "").toLowerCase()] = r.name || "Traveler"; } catch (e) {}
+      }
+      const out = [];
+      for (const h of (window.MP.allyList() || [])) {
+        const k = String(h || "").toLowerCase();
+        if (k && live[k]) out.push({ h: k, name: live[k] });
+      }
+      return out;
+    } catch (e) { return []; }
+  }
+  function questShareLabel(sq) {
+    try {
+      const t = (sq && sq.t) || {};
+      let where = t.placeName || t.name || t.houseTitle || "the wilds";
+      try {
+        if (!t.placeName && !t.name && !t.houseTitle && isFinite(t.gx)) {
+          const p = window.Game.G.player;
+          where = `~${Math.round(Math.hypot(t.gx - (p.x || 0), t.gy - (p.y || 0)))}t away`;
+        }
+      } catch (e) {}
+      if (sq.sys === "g") {
+        if (sq.kind === "kill") return `⚔️ Slay ${sq.need}× ${sq.mobKind} @ ${where}`;
+        if (sq.kind === "clear") return `🏠 Clear ${where}`;
+        return `📦 Fetch ${sq.need}× ${sq.itemId} @ ${where}`;
+      }
+      if (sq.type === "slay") return `⚔️ Slay ${sq.need}× ${sq.mobKind} @ ${where}`;
+      if (sq.type === "fetch") return `📦 Fetch ${sq.need}× ${sq.itemId} @ ${where}`;
+      return `🏠 Clear ${t.name || where}`;
+    } catch (e) { return (sq && sq.title) || "a quest"; }
+  }
+  // Append a 📤 Share button (or inline ally picker) into a button row.
+  // ref: {sys:"v", id} or {sys:"g", gid}. Nothing sends without a tap.
+  function appendQuestShareBtn(row, ref) {
+    try {
+      if (!window.MP || !window.MP.shareQuest) return;
+      const allies = questShareAllies();
+      if (!allies.length) return;
+      const b = document.createElement("button");
+      b.textContent = "📤 Share";
+      b.className = "ghost";
+      b.title = "Offer this quest to an allied traveler — they choose to take it up";
+      b.onclick = () => {
+        try {
+          if (allies.length === 1) {
+            const r = window.MP.shareQuest(allies[0].h, ref);
+            toast(r && r.ok ? `📤 Shared “${(r && r.title) || "quest"}” with ${(r && r.toName) || allies[0].name} — they choose to take it up.` : ("⚠️ " + ((r && r.msg) || "Share failed.")), 4500);
+            return;
+          }
+          try { if (b.nextSibling && b.nextSibling.className === "qsharepick") { b.nextSibling.remove(); return; } } catch (e) {}
+          const pick = document.createElement("span");
+          pick.className = "qsharepick";
+          pick.style.cssText = "display:inline-flex;gap:4px;flex-wrap:wrap;align-items:center";
+          for (const a of allies) {
+            const ab = document.createElement("button");
+            ab.textContent = "🤝 " + a.name;
+            ab.title = "Share with " + a.name;
+            ab.onclick = (ev) => {
+              try { ev.stopPropagation(); } catch (e) {}
+              let r = null;
+              try { r = window.MP.shareQuest(a.h, ref); } catch (e) { r = { ok: false, msg: "Share failed." }; }
+              toast(r && r.ok ? `📤 Shared with ${a.name} — they choose to take it up.` : ("⚠️ " + ((r && r.msg) || "Share failed.")), 4500);
+              try { pick.remove(); } catch (e) {}
+            };
+            pick.appendChild(ab);
+          }
+          b.after(pick);
+        } catch (e) { toast("⚠️ Share failed.", 3000); }
+      };
+      row.appendChild(b);
+    } catch (e) {}
+  }
+  // Incoming shares section for the log tabs. sysFilter "v"|"g".
+  function renderQuestSharesInto(body, sysFilter) {
+    try {
+      if (!window.MP || !window.MP.questShareInbox) return;
+      const items = (window.MP.questShareInbox() || []).filter(s => s && s.q && s.q.sys === sysFilter);
+      if (!items.length) return;
+      const sec = pSec(body, "🤝 Shared with you (" + items.length + ")", "An ally offers a quest — take it up as your own copy, or turn it down. Nothing is forced.");
+      for (const s of items) {
+        const d = document.createElement("div");
+        d.style.cssText = "margin:6px 0;padding:6px 8px;border:1px solid #3a4a5a;border-radius:8px";
+        const t = document.createElement("div");
+        t.style.fontWeight = "900";
+        t.textContent = "📜 " + (s.q.title || "A shared quest") + " — from " + (s.fromName || "an ally");
+        d.appendChild(t);
+        const o = document.createElement("div");
+        o.style.cssText = "font-size:12px;opacity:0.9;margin:2px 0";
+        o.textContent = "👉 " + questShareLabel(s.q) + " (fresh progress, your own reward)";
+        d.appendChild(o);
+        const row = document.createElement("div");
+        row.style.cssText = "display:flex;gap:6px;margin-top:4px";
+        const ok = document.createElement("button");
+        ok.textContent = "🤝 Take it up";
+        ok.title = "Add your own copy to the log";
+        ok.onclick = async () => {
+          ok.disabled = true;
+          let r = null;
+          try { r = await window.MP.questShareAnswer(s.shareId, true); } catch (e) { r = { ok: false, msg: "Couldn't take it up." }; }
+          if (!(r && r.ok)) { toast("⚠️ " + ((r && r.msg) || "Couldn't take it up."), 4000); ok.disabled = false; renderQuests(); return; }
+          toast("🤝 Taken up: " + ((r.quest && r.quest.title) || s.q.title || "quest"), 4500);
+          try { updateHUD(); updateHotbar(); } catch (e) {}
+          renderQuests();
+        };
+        row.appendChild(ok);
+        const no = document.createElement("button");
+        no.textContent = "Decline";
+        no.className = "ghost";
+        no.onclick = async () => {
+          try { await window.MP.questShareAnswer(s.shareId, false); } catch (e) {}
+          renderQuests();
+        };
+        row.appendChild(no);
+        d.appendChild(row);
+        sec.appendChild(d);
+      }
+    } catch (e) {}
+  }
+
   function renderQuests() {
     const body = $("questList");
     if (!body) return;
@@ -13328,6 +13625,7 @@ window.UI = (() => {
     if (questTab === "heaven") { renderHeavenQuests(body, heavAll); return; }
     if (questTab === "done") { renderQuestHistory(body, doneAll, "done"); return; }
     if (questTab === "abandoned") { renderQuestHistory(body, ab, "abandoned"); return; }
+    try { renderQuestSharesInto(body, "v"); } catch (e) {}
     for (const q of act) {
       const sec = pSec(body, `${q.status === "turnin" ? "📨" : "📜"} ${q.title}`, `from ${q.giver ? q.giver.name : "the wilds"}${q.turnIn && q.status === "active" ? " · report back when done" : ""}`);
       sec.appendChild(pRow(`${window.Quests.objectiveText(q)}`));
@@ -13361,11 +13659,11 @@ window.UI = (() => {
           try { if (!s.done && q.steps.find(x => !x.done) === s) { d.style.fontWeight = "900"; d.style.color = "#ffd93d"; } } catch (e) { }
           list.appendChild(d);
         }
-        sec.appendChild(list);
-        const hint = document.createElement("div");
-        hint.className = "invempty";
-        hint.textContent = "You can check 📜 Quests (J) anytime to see what lesson is next — this log reopens after every step.";
-        sec.appendChild(hint);
+       sec.appendChild(list);
+       const hint = document.createElement("div");
+       hint.className = "invempty";
+        hint.textContent = "Check 📜 Quests (J) anytime to see what lesson is next — the log stays closed while you play.";
+       sec.appendChild(hint);
       }
       const tgt = window.Quests.targetPos(q);
       if (tgt && q.status !== "turnin") {
@@ -13462,6 +13760,7 @@ window.UI = (() => {
       ab.className = "ghost";
       ab.onclick = () => { if (confirm(`Abandon "${q.title}"?`)) { window.Quests.abandon(q.id); renderQuests(); updateHUD(); } };
       row.appendChild(ab);
+      if (q.type === "slay" || q.type === "fetch" || q.type === "clear") { try { appendQuestShareBtn(row, { sys: "v", id: q.id }); } catch (e) {} }
       sec.appendChild(row);
     }
     // 🌅 goddess errands share the Active tab (they are easy to miss in a
@@ -13589,6 +13888,7 @@ window.UI = (() => {
     hint.className = "invempty";
     hint.textContent = "Guild contracts live here — pin postings from any 🏛️ guildhall Noticeboard, turn them in at any 🛎️ Counter.";
     body.appendChild(hint);
+    try { renderQuestSharesInto(body, "g"); } catch (e) {}
     if (!list.length) {
       const empty = document.createElement("div");
       empty.className = "invempty";
@@ -13668,6 +13968,7 @@ window.UI = (() => {
         renderQuests();
       };
       row.appendChild(ab2);
+      if ((q.kind === "kill" || q.kind === "clear" || q.kind === "fetch") && !q.commissionId) { try { appendQuestShareBtn(row, { sys: "g", gid: q.gid }); } catch (e) {} }
       sec.appendChild(row);
     }
     // recent turn-ins, newest first

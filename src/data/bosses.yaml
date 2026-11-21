@@ -41,8 +41,10 @@
 #      mean. Values carry ~1% probe noise; well inside spawn jitter.
 #   e. Bulwark (frail/weak): each warlord's spell defence (sdef) runs off
 #      its physical DEF — frail:mag means sdef ~15% BELOW def (spells
-#      hurt), frail:phys means sdef ~15% ABOVE def. weak: <element> is
-#      the thematic ~+10% damage weakness (see dealDamage).
+#      hurt), frail:phys means sdef ~15% ABOVE def (only while the boss
+#      carries no sdef row — an explicit sdef takes manual control and the
+#      bulwark yields). weak: <element> is the thematic ~+10% damage
+#      weakness (see dealDamage).
 #   f. Spawn jitter: bosses roll near-template — HP/MP/ATK +-~3%, exact
 #      DEF/SDEF (the old +-8% coin-flip on small bodies is gone).
 #   g. XP: xpReward = xp * (1 + (lv-1)*0.22) * (1 + (tier-1)*0.25),
@@ -59,6 +61,12 @@
 #   hp/mp/atk/def/spd/xp
 #             Level-1 template body (see pipeline above). def is the base
 #             physical DEF before the tier DEF band; spd in tiles/sec-ish.
+#   matk      Spell-power base (default: atk). Baked per boss so casters and
+#             bruisers tune independently — every row below carries the same
+#             value as its atk, which is exactly the old behavior.
+#   sdef      Spell-defence base. OMIT IT: without an sdef row the bulwark
+#             derivation (e) still governs, bit-for-bit as before. Setting it
+#             takes manual control (bulwark yields for that boss).
 #   abilities Signatures, always kept (see h). Spell/technique ids from
 #             CFG.ABILITIES / techniques — must exist or they are skipped.
 #   body      Mover + art plan: humanoid | brute | beast | serpent |
@@ -195,7 +203,8 @@ bosses:
     name: Dungeon Lord
     hp: 320
     mp: 60
-    atk: 10
+    atk: 42
+    matk: 42
     def: 4
     spd: 3
     xp: 300
@@ -213,7 +222,8 @@ bosses:
     name: Goblin King
     hp: 380
     mp: 80
-    atk: 8
+    atk: 45
+    matk: 45
     def: 4
     spd: 3.2
     xp: 380
@@ -230,7 +240,8 @@ bosses:
     name: Skeleton Warlord
     hp: 420
     mp: 80
-    atk: 9
+    atk: 45
+    matk: 45
     def: 4
     spd: 3
     xp: 430
@@ -248,7 +259,8 @@ bosses:
     name: Kobold King
     hp: 360
     mp: 90
-    atk: 8
+    atk: 39
+    matk: 39
     def: 4
     spd: 3.6
     xp: 400
@@ -264,7 +276,8 @@ bosses:
     name: Bandit Warlord
     hp: 380
     mp: 50
-    atk: 7
+    atk: 39
+    matk: 39
     def: 4
     spd: 3.4
     xp: 380
@@ -280,7 +293,8 @@ bosses:
     name: Gnoll Alpha
     hp: 400
     mp: 60
-    atk: 7
+    atk: 42
+    matk: 42
     def: 4
     spd: 4.4
     xp: 410
@@ -296,7 +310,8 @@ bosses:
     name: Hierophant of the Pit
     hp: 380
     mp: 160
-    atk: 9
+    atk: 48
+    matk: 48
     def: 4
     spd: 2.8
     xp: 450
@@ -312,7 +327,8 @@ bosses:
     name: Drowned Captain
     hp: 380
     mp: 80
-    atk: 8
+    atk: 45
+    matk: 45
     def: 4
     spd: 3.2
     xp: 390
@@ -329,7 +345,8 @@ bosses:
     name: Slime Sovereign
     hp: 1600
     mp: 200
-    atk: 14
+    atk: 51
+    matk: 51
     def: 10
     spd: 5
     xp: 420
@@ -346,7 +363,8 @@ bosses:
     name: Kappa King
     hp: 1400
     mp: 100
-    atk: 15
+    atk: 54
+    matk: 54
     def: 10
     spd: 4
     xp: 400
@@ -363,7 +381,8 @@ bosses:
     name: Orc Warchief
     hp: 1400
     mp: 70
-    atk: 13
+    atk: 54
+    matk: 54
     def: 10
     spd: 3
     xp: 420
@@ -379,7 +398,8 @@ bosses:
     name: Troll King
     hp: 1900
     mp: 50
-    atk: 13
+    atk: 54
+    matk: 54
     def: 10
     spd: 2.2
     xp: 430
@@ -396,7 +416,8 @@ bosses:
     name: Harpy Matriarch
     hp: 1500
     mp: 200
-    atk: 14
+    atk: 57
+    matk: 57
     def: 10
     spd: 5
     xp: 430
@@ -414,7 +435,8 @@ bosses:
     name: Rusalka Queen
     hp: 5000
     mp: 500
-    atk: 19
+    atk: 63
+    matk: 63
     def: 20
     spd: 3.6
     xp: 440
@@ -432,7 +454,8 @@ bosses:
     name: Wraith Sovereign
     hp: 6600
     mp: 570
-    atk: 19
+    atk: 63
+    matk: 63
     def: 24
     spd: 5
     xp: 510
@@ -450,7 +473,8 @@ bosses:
     name: Tarantula Broodmother
     hp: 7020
     mp: 450
-    atk: 20
+    atk: 69
+    matk: 69
     def: 17
     spd: 8
     xp: 600
@@ -467,7 +491,8 @@ bosses:
     name: The Joker
     hp: 5180
     mp: 580
-    atk: 17
+    atk: 66
+    matk: 66
     def: 19
     spd: 6
     xp: 600
@@ -484,7 +509,8 @@ bosses:
     name: Minotaur Warlord
     hp: 7040
     mp: 590
-    atk: 17
+    atk: 63
+    matk: 63
     def: 22
     spd: 3
     xp: 580
@@ -501,7 +527,8 @@ bosses:
     name: Draugr King
     hp: 6020
     mp: 500
-    atk: 15
+    atk: 60
+    matk: 60
     def: 22
     spd: 2.6
     xp: 590
@@ -519,7 +546,8 @@ bosses:
     name: Cursed Pharaoh
     hp: 5290
     mp: 490
-    atk: 17
+    atk: 63
+    matk: 63
     def: 25
     spd: 5
     xp: 610
@@ -537,7 +565,8 @@ bosses:
     name: Medusa Queen
     hp: 5170
     mp: 670
-    atk: 18
+    atk: 63
+    matk: 63
     def: 14
     spd: 5
     xp: 560
@@ -554,7 +583,8 @@ bosses:
     name: Oni Daimyō
     hp: 16640
     mp: 1440
-    atk: 20
+    atk: 75
+    matk: 75
     def: 54
     spd: 7
     xp: 660
@@ -571,7 +601,8 @@ bosses:
     name: Tengu Stormlord
     hp: 15500
     mp: 1500
-    atk: 24
+    atk: 72
+    matk: 72
     def: 49
     spd: 6
     xp: 620
@@ -588,7 +619,8 @@ bosses:
     name: Nine-Tailed Kitsune
     hp: 11510
     mp: 2420
-    atk: 24
+    atk: 72
+    matk: 72
     def: 35
     spd: 11
     xp: 670
@@ -605,7 +637,8 @@ bosses:
     name: Siege Ant Queen
     hp: 21640
     mp: 1250
-    atk: 21
+    atk: 63
+    matk: 63
     def: 56
     spd: 2.4
     xp: 680
@@ -623,7 +656,8 @@ bosses:
     name: Scorpion Emperor
     hp: 15580
     mp: 1450
-    atk: 22
+    atk: 66
+    matk: 66
     def: 46
     spd: 5
     xp: 660
@@ -639,7 +673,8 @@ bosses:
     name: Nāga Rājā
     hp: 21560
     mp: 2000
-    atk: 23
+    atk: 78
+    matk: 78
     def: 43
     spd: 3.6
     xp: 650
@@ -655,7 +690,8 @@ bosses:
     name: Rakshasa Maharaja
     hp: 18560
     mp: 2140
-    atk: 24
+    atk: 84
+    matk: 84
     def: 44
     spd: 4
     xp: 670
@@ -671,7 +707,8 @@ bosses:
     name: Dullahan Lord
     hp: 68080
     mp: 4180
-    atk: 25
+    atk: 75
+    matk: 75
     def: 82
     spd: 7
     xp: 640
@@ -688,7 +725,8 @@ bosses:
     name: Baba Yaga
     hp: 52060
     mp: 4250
-    atk: 27
+    atk: 81
+    matk: 81
     def: 96
     spd: 10
     xp: 700
@@ -704,7 +742,8 @@ bosses:
     name: Wyvern Matriarch
     hp: 120700
     mp: 10190
-    atk: 31
+    atk: 93
+    matk: 93
     def: 120
     spd: 14
     xp: 700
@@ -721,7 +760,8 @@ bosses:
     name: Jötunn Jarl
     hp: 122740
     mp: 17000
-    atk: 32
+    atk: 96
+    matk: 96
     def: 130
     spd: 12.8
     xp: 720
@@ -737,7 +777,8 @@ bosses:
     name: Hydra Broodmother
     hp: 122800
     mp: 21000
-    atk: 34
+    atk: 102
+    matk: 102
     def: 127
     spd: 15
     xp: 780
@@ -751,27 +792,29 @@ bosses:
     hp_trim: 1.059
     flags: [aquatic, diver]
     roster: surface
-  fenrir_alpha:
-    name: Fenrir Alpha
-    hp: 127000
-    mp: 15000
-    atk: 30
-    def: 127
-    spd: 17
-    xp: 740
-    abilities: [whirlwind, lightning, heal, panacea]
-    body: beast
-    tint: "#23232e"
-    tier: 6
-    themes: [glacier, storm, cavern, grove, briar]
-    frail: phys
-    weak: electric
-    roster: surface
+ fenrir_alpha:
+   name: Fenrir Alpha
+    hp: 6200
+    mp: 550
+    atk: 54
+    matk: 54
+    def: 19
+    spd: 7
+    xp: 570
+   abilities: [whirlwind, lightning, heal, panacea]
+   body: beast
+   tint: "#23232e"
+   tier: 3
+    themes: [glacier, fungal, cavern, crypt, briar]
+   frail: phys
+   weak: electric
+   roster: surface
   voidstalker:
     name: Voidstalker
     hp: 122640
     mp: 20030
-    atk: 45
+    atk: 135
+    matk: 135
     def: 119
     spd: 18
     xp: 760
@@ -788,7 +831,8 @@ bosses:
     name: Leviathan
     hp: 188000
     mp: 23000
-    atk: 40
+    atk: 120
+    matk: 120
     def: 130
     spd: 13.6
     xp: 850
@@ -808,7 +852,8 @@ bosses:
     name: Infernal Overlord
     hp: 1856352
     mp: 109897
-    atk: 66
+    atk: 198
+    matk: 198
     def: 827
     spd: 3
     xp: 1200
@@ -825,7 +870,8 @@ bosses:
     name: Succubus Matriarch
     hp: 1769336
     mp: 160619
-    atk: 60
+    atk: 180
+    matk: 180
     def: 620
     spd: 4.4
     xp: 1250
@@ -841,7 +887,8 @@ bosses:
     name: Doom Tyrant
     hp: 6198881
     mp: 325878
-    atk: 87
+    atk: 261
+    matk: 261
     def: 1924
     spd: 3.2
     xp: 1400
@@ -858,7 +905,8 @@ bosses:
     name: Hell Magus
     hp: 5628869
     mp: 488816
-    atk: 77
+    atk: 231
+    matk: 231
     def: 1154
     spd: 3.6
     xp: 1300
@@ -877,7 +925,8 @@ bosses:
     name: Peter the Fallen
     hp: 8225
     mp: 850
-    atk: 110
+    atk: 330
+    matk: 330
     def: 4
     spd: 4.8
     xp: 8000
@@ -895,7 +944,8 @@ bosses:
     name: Ash Tyrant
     hp: 19202552
     mp: 853407
-    atk: 104
+    atk: 312
+    matk: 312
     def: 3434
     spd: 3.2
     xp: 1350
@@ -913,7 +963,8 @@ bosses:
     name: Cinder Emperor
     hp: 61753679
     mp: 3375925
-    atk: 139
+    atk: 417
+    matk: 417
     def: 5954
     spd: 3
     xp: 1450
@@ -931,7 +982,8 @@ bosses:
     name: Magma Mauler
     hp: 19721540
     mp: 640055
-    atk: 121
+    atk: 363
+    matk: 363
     def: 4292
     spd: 2.8
     xp: 1500
@@ -950,7 +1002,8 @@ bosses:
     name: Pyre Queen
     hp: 19029556
     mp: 1351228
-    atk: 101
+    atk: 303
+    matk: 303
     def: 2575
     spd: 4
     xp: 1400
@@ -969,7 +1022,8 @@ bosses:
     name: Slag Colossus
     hp: 65715236
     mp: 1808531
-    atk: 148
+    atk: 444
+    matk: 444
     def: 8931
     spd: 2.4
     xp: 1550
@@ -988,7 +1042,8 @@ bosses:
     name: Ember Inquisitor
     hp: 18943058
     mp: 1280111
-    atk: 104
+    atk: 312
+    matk: 312
     def: 2575
     spd: 3.8
     xp: 1400
@@ -1007,7 +1062,8 @@ bosses:
     name: Char King
     hp: 61986712
     mp: 3134788
-    atk: 143
+    atk: 429
+    matk: 429
     def: 7442
     spd: 3
     xp: 1500
@@ -1025,7 +1081,8 @@ bosses:
     name: Volcano Pontiff
     hp: 60821548
     mp: 5063888
-    atk: 126
+    atk: 378
+    matk: 378
     def: 5954
     spd: 3.4
     xp: 1450
@@ -1044,7 +1101,8 @@ bosses:
     name: Void Prelate
     hp: 19029556
     mp: 1422346
-    atk: 101
+    atk: 303
+    matk: 303
     def: 2575
     spd: 3.8
     xp: 1400
@@ -1063,7 +1121,8 @@ bosses:
     name: Umbral Matriarch
     hp: 19116054
     mp: 1351228
-    atk: 104
+    atk: 312
+    matk: 312
     def: 2575
     spd: 4.2
     xp: 1450
@@ -1082,7 +1141,8 @@ bosses:
     name: Gloom Sovereign
     hp: 62219745
     mp: 3617063
-    atk: 143
+    atk: 429
+    matk: 429
     def: 5954
     spd: 3.2
     xp: 1500
@@ -1101,7 +1161,8 @@ bosses:
     name: Rift Eater
     hp: 19375548
     mp: 1137876
-    atk: 111
+    atk: 333
+    matk: 333
     def: 3434
     spd: 3.6
     xp: 1480
@@ -1120,7 +1181,8 @@ bosses:
     name: Nether Abbess
     hp: 18994957
     mp: 1493463
-    atk: 98
+    atk: 294
+    matk: 294
     def: 2575
     spd: 3.6
     xp: 1420
@@ -1139,7 +1201,8 @@ bosses:
     name: Mirror Abbot
     hp: 61054581
     mp: 4340475
-    atk: 131
+    atk: 393
+    matk: 393
     def: 5954
     spd: 3.4
     xp: 1450
@@ -1158,7 +1221,8 @@ bosses:
     name: Eventide Horror
     hp: 65482203
     mp: 3375925
-    atk: 148
+    atk: 444
+    matk: 444
     def: 7442
     spd: 2.8
     xp: 1550
@@ -1177,7 +1241,8 @@ bosses:
     name: Hollow Cantor
     hp: 18943058
     mp: 1422346
-    atk: 101
+    atk: 303
+    matk: 303
     def: 2575
     spd: 3.2
     xp: 1400
@@ -1196,7 +1261,8 @@ bosses:
     name: Gore Patriarch
     hp: 19635042
     mp: 924525
-    atk: 114
+    atk: 342
+    matk: 342
     def: 4292
     spd: 3
     xp: 1500
@@ -1215,7 +1281,8 @@ bosses:
     name: Maw Primogenitor
     hp: 19894536
     mp: 782290
-    atk: 121
+    atk: 363
+    matk: 363
     def: 4292
     spd: 2.8
     xp: 1580
@@ -1234,7 +1301,8 @@ bosses:
     name: Flesh Sculptor
     hp: 19116054
     mp: 1351228
-    atk: 104
+    atk: 312
+    matk: 312
     def: 3434
     spd: 3.4
     xp: 1450
@@ -1253,7 +1321,8 @@ bosses:
     name: Organ Choirmaster
     hp: 19029556
     mp: 1422346
-    atk: 98
+    atk: 294
+    matk: 294
     def: 2575
     spd: 3.2
     xp: 1420
@@ -1272,7 +1341,8 @@ bosses:
     name: Bile Cardinal
     hp: 19202552
     mp: 1280111
-    atk: 104
+    atk: 312
+    matk: 312
     def: 3434
     spd: 3.4
     xp: 1450
@@ -1290,7 +1360,8 @@ bosses:
     name: Sinew Despot
     hp: 61986712
     mp: 2893650
-    atk: 148
+    atk: 444
+    matk: 444
     def: 7442
     spd: 4
     xp: 1500
@@ -1308,7 +1379,8 @@ bosses:
     name: Skin Pope
     hp: 60681728
     mp: 5063888
-    atk: 126
+    atk: 378
+    matk: 378
     def: 5954
     spd: 3.2
     xp: 1450
@@ -1327,7 +1399,8 @@ bosses:
     name: Gut Empress
     hp: 65249170
     mp: 3617063
-    atk: 139
+    atk: 417
+    matk: 417
     def: 5954
     spd: 3
     xp: 1550
@@ -1345,7 +1418,8 @@ bosses:
     name: Dread Masticator
     hp: 65482203
     mp: 2411375
-    atk: 156
+    atk: 468
+    matk: 468
     def: 7442
     spd: 3.2
     xp: 1600
@@ -1364,7 +1438,8 @@ bosses:
     name: Blood Evangel
     hp: 60961368
     mp: 4822750
-    atk: 131
+    atk: 393
+    matk: 393
     def: 5954
     spd: 3.6
     xp: 1480
@@ -1385,7 +1460,8 @@ bosses:
     name: Divine Dragon
     hp: 20067532
     mp: 1422346
-    atk: 118
+    atk: 354
+    matk: 354
     def: 4292
     spd: 3.4
     xp: 1700
@@ -1406,7 +1482,8 @@ bosses:
     name: Celestial Messenger
     hp: 19375548
     mp: 1493463
-    atk: 108
+    atk: 324
+    matk: 324
     def: 3434
     spd: 4.4
     xp: 1550
@@ -1426,7 +1503,8 @@ bosses:
     name: Reservoir Leviathan
     hp: 65715236
     mp: 3617063
-    atk: 143
+    atk: 429
+    matk: 429
     def: 7442
     spd: 3
     xp: 1600
@@ -1447,7 +1525,8 @@ bosses:
     name: Seraph Regent
     hp: 61986712
     mp: 4581613
-    atk: 139
+    atk: 417
+    matk: 417
     def: 5954
     spd: 3.8
     xp: 1580
@@ -1472,7 +1551,8 @@ bosses:
     name: Threshold Devourer
     hp: 520
     mp: 140
-    atk: 34
+    atk: 102
+    matk: 102
     def: 2
     spd: 3.2
     xp: 600
@@ -1496,7 +1576,8 @@ bosses:
     name: Goddess of Dawn
     hp: 8225
     mp: 850
-    atk: 110
+    atk: 330
+    matk: 330
     def: 4
     spd: 4.8
     xp: 8000

@@ -257,6 +257,7 @@ window.CFG = (() => {
     shield: { per: 6, unit: "shield parries", how: "parrying with a shield in the off-hand" },
     spell: { per: 15, unit: "casts", how: "casting this spell" },
     technique: { per: 10, unit: "casts", how: "casting this Deep Art" },
+    shallow: { per: 5, unit: "casts", how: "casting this Shallow Art" },
     tpass: { per: 12, unit: "openings", how: "triggering this opening in a fight" },
     status: { per: 12, unit: "afflictions", how: "afflicting foes with this ailment" },
     taming: { per: 2, unit: "tames", how: "taming beasts" },
@@ -370,7 +371,7 @@ window.CFG = (() => {
     blessed_weapon: { id: "blessed_weapon", name: "Blessed Weapon", mp: 40, cd: 18.0, range: 0, power: 0, kind: "buff", element: "holy", desc: "Your strikes deal +25% and count as holy for 15s.", icon: "😇" },
     // ---- weapon techniques: active arts demand their weapon as the default ----
     // Every active also inherits its weapon family's skill tree and scales
-    // with the wielded weapon's strength (see TECH_WEAPON_FAM).
+    // with the wielded weapon's strength (see TECH_WEAPON_FAM). Arts listing several families (Faux Chop) gain every listed weapon tree's ranks at once and scale with the wielded weapon's tier.
     holy_sword:    { id: "holy_sword", name: "Holy Sword", mp: 40, cd: 60.0, range: 3, power: 0, kind: "technique", tech: "holy_sword", element: "holy", desc: "Instant 50x holy strike before you. Requires a sword as your default weapon. Inherits Swordplay + scales with sword tier.", icon: "🗡️" },
     cinder_edge:   { id: "cinder_edge", name: "Cinder Edge", mp: 20, cd: 25.0, range: 0, power: 0, kind: "technique", tech: "cinder_edge", element: "fire", desc: "A 10x burning sword arc. Requires a sword as your default weapon. Inherits Swordplay + scales with sword tier.", icon: "🎇" },
     skullsplitter: { id: "skullsplitter", name: "Skullsplitter", mp: 22, cd: 30.0, range: 2.2, power: 0, kind: "technique", tech: "skullsplitter", element: "physical", desc: "An 8x axe slam: all around you + sundered (-15 DEF). Requires an axe as your default weapon. Inherits Reaving + scales with axe tier.", icon: "🪓" },
@@ -399,6 +400,19 @@ window.CFG = (() => {
     // ---- whip arts: the taming lash cracks twice ----
     thundering_crack: { id: "thundering_crack", name: "Thundering Crack", mp: 22, cd: 26.0, range: 5, power: 0, kind: "technique", tech: "thundering_crack", element: "electric", desc: "A 4x thundercrack that paralyzes every nearby foe, then cracks you faster and harder (+30% damage, +25% speed for 8s). Requires a whip as your default weapon. Inherits Crackling + scales with whip tier.", icon: "⛈️" },
     whirlwind_slinger: { id: "whirlwind_slinger", name: "Whirlwind Slinger", mp: 24, cd: 30.0, range: 0, power: 0, kind: "technique", tech: "whirlwind_slinger", element: "physical", desc: "Spin a long whip in a whirling spiral for 5s: everything it touches takes 1.5x and is batted away. Requires a whip as your default weapon. Inherits Crackling + scales with whip tier.", icon: "🪀" },
+    // ---- shallow arts: small dual-cost arts (MP + stamina), learnt by light deeds ----
+    flowing_strikes: { id: "flowing_strikes", name: "Flowing Strikes", mp: 8, st: 8, cd: 8.0, range: 2.6, power: 0, kind: "shallow", tech: "flowing_strikes", element: "water", desc: "Unleash a flurry of flowing punches (4 x 1.5x) that slow the target for 3s. Requires bare fists as your default weapon. Inherits Martial Arts.", icon: "🌊" },
+    faux_chop: { id: "faux_chop", name: "Faux Chop", mp: 2, st: 6, cd: 6.0, range: 2.6, power: 0, kind: "shallow", tech: "faux_chop", element: "physical", desc: "A rough chop (3x) that leaves the foe bleeding. Requires an axe, sword or dagger as your default weapon. Inherits Reaving + Swordplay + Daggers, all at once, + scales with the wielded tier.", icon: "🩸" },
+    one_armed_guard: { id: "one_armed_guard", name: "One-Armed Guard", mp: 4, st: 4, cd: 12.0, range: 0, power: 0, kind: "shallow", tech: "one_armed_guard", element: "physical", desc: "Parry blows with one arm for 3s, then answer with a single blow equal to all you turned aside. Requires bare fists as your default weapon. Inherits Martial Arts.", icon: "🦾" },
+    glancing_arc: { id: "glancing_arc", name: "Glancing Arc", mp: 4, st: 4, cd: 7.0, range: 2.6, power: 0, kind: "shallow", tech: "glancing_arc", element: "physical", desc: "A quick sword arc (2.5x) before you. Requires a sword as your default weapon. Inherits Swordplay + scales with sword tier.", icon: "🗡️" },
+    splinter_hewn: { id: "splinter_hewn", name: "Splinter Hewn", mp: 3, st: 5, cd: 7.0, range: 2.6, power: 0, kind: "shallow", tech: "splinter_hewn", element: "physical", desc: "A splitting axe cut (3x) that splinters armor (-6 DEF, 6s). Requires an axe as your default weapon. Inherits Reaving + scales with axe tier.", icon: "🪓" },
+    wasp_sting: { id: "wasp_sting", name: "Wasp Sting", mp: 2, st: 4, cd: 5.0, range: 2.6, power: 0, kind: "shallow", tech: "wasp_sting", element: "nature", desc: "A quick dagger sting (2x) that envenoms. Requires a dagger as your default weapon. Inherits Daggers + scales with dagger tier.", icon: "🐝" },
+    knockback_tap: { id: "knockback_tap", name: "Knockback Tap", mp: 3, st: 5, cd: 7.0, range: 2.6, power: 0, kind: "shallow", tech: "knockback_tap", element: "physical", desc: "A short hammer tap (3.5x) that stuns 1s. Requires a hammer as your default weapon. Inherits Sundering + scales with hammer tier.", icon: "🔨" },
+    short_lunge: { id: "short_lunge", name: "Short Lunge", mp: 3, st: 4, cd: 6.0, range: 3.2, power: 0, kind: "shallow", tech: "short_lunge", element: "physical", desc: "A short spear thrust (3x) at extended reach. Requires a spear as your default weapon. Inherits Phalanx + scales with spear tier.", icon: "🔱" },
+    twin_nock: { id: "twin_nock", name: "Twin Nock", mp: 3, st: 4, cd: 6.0, range: 9, power: 0, kind: "shallow", tech: "twin_nock", element: "physical", desc: "Loose two piercing arrows (2 x 2x), no arrows spent. Requires a bow as your default weapon. Inherits Archery + scales with bow strength.", icon: "🏹" },
+    wrist_snap: { id: "wrist_snap", name: "Wrist Snap", mp: 2, st: 4, cd: 6.0, range: 3.4, power: 0, kind: "shallow", tech: "wrist_snap", element: "physical", desc: "A cracking wrist-snap (2.5x) that stuns briefly. Requires a whip as your default weapon. Inherits Crackling + scales with whip tier.", icon: "🪢" },
+    palm_star: { id: "palm_star", name: "Palm Star", mp: 2, st: 3, cd: 5.0, range: 9, power: 0, kind: "shallow", tech: "palm_star", element: "physical", desc: "Hurl two stars from the palm (2 x 2x, consumes 1 best shuriken). Needs no weapon wielded. Inherits Hurling.", icon: "✴️" },
+    brace_bash: { id: "brace_bash", name: "Brace Bash", mp: 3, st: 5, cd: 8.0, range: 2.2, power: 0, kind: "shallow", tech: "brace_bash", element: "physical", desc: "A braced shield bash (2.5x) that splinters armor (-6 DEF, 6s). Requires a shield equipped. Inherits Shieldwork.", icon: "🧱" },
     // ---- cataclysms: deep-delve tier (tomes only at effective depth 5+) ----
     // long channels, dramatic releases, fight-ending power
    tidal_wave:  { id: "tidal_wave", name: "Tidal Wave", mp: 72, cd: 45.0, range: 13, power: 7, kind: "cataclysm", element: "water", desc: "Channel 2s, then RIDE a huge wave forward, crushing and hurling everything in your path. Holding attack hurls weapon swings down the foam line at flurry speed.", icon: "🏄" },
@@ -451,6 +465,10 @@ window.CFG = (() => {
     comet_shot: "bow", skirmisher: "bow", hammerfell_impact: "hammer",
     shadow_disciples: "unarmed", stalwart_reflector: "shield",
     locust_swarm: "whip", thundering_crack: "whip", whirlwind_slinger: "whip",
+    flowing_strikes: "unarmed", faux_chop: ["axe", "sword", "dagger"], one_armed_guard: "unarmed",
+    glancing_arc: "sword", splinter_hewn: "axe", wasp_sting: "dagger", knockback_tap: "hammer",
+    short_lunge: "spear", twin_nock: "bow", wrist_snap: "whip", palm_star: null,
+    brace_bash: "shield",
   };
   // ---- spell tiers: higher spells inherit every unlocked rank of their ----
   // previous tier's tree (one-way: lower tiers never gain from higher ones).
@@ -508,6 +526,19 @@ window.CFG = (() => {
     locust_swarm: { id: "locust_swarm", abId: "locust_swarm", name: "Locust Swarm", icon: "🦗", active: true, req: { uses: { tame: 50, insect_tame: 10 } }, hint: "Tame 50 beasts, including at least 10 insects, to earn the swarm's trust." },
     thundering_crack: { id: "thundering_crack", abId: "thundering_crack", name: "Thundering Crack", icon: "⛈️", active: true, req: { el: { electric: 6000 }, fam: { whip: 10000 } }, hint: "Deal electric + whip damage." },
     whirlwind_slinger: { id: "whirlwind_slinger", abId: "whirlwind_slinger", name: "Whirlwind Slinger", icon: "🪀", active: true, req: { fam: { whip: 12000 }, kills: 150 }, hint: "Deal whip damage; fell 150 foes. Spin the spiral." },
+    // ---- shallow arts: light deeds, light prices, one per weapon family ----
+    flowing_strikes: { id: "flowing_strikes", abId: "flowing_strikes", name: "Flowing Strikes", icon: "🌊", active: true, shallow: true, req: { fam: { unarmed: 3000 } }, hint: "Fight bare-handed." },
+    faux_chop: { id: "faux_chop", abId: "faux_chop", name: "Faux Chop", icon: "🩸", active: true, shallow: true, req: { anyFam: { axe: 2000, sword: 2000, dagger: 2000 } }, hint: "Deal axe, sword or dagger damage." },
+    one_armed_guard: { id: "one_armed_guard", abId: "one_armed_guard", name: "One-Armed Guard", icon: "🦾", active: true, shallow: true, req: { anyFam: { sword: 2000, dagger: 2000, unarmed: 2000 } }, hint: "Deal sword, dagger or unarmed damage." },
+    glancing_arc: { id: "glancing_arc", abId: "glancing_arc", name: "Glancing Arc", icon: "🗡️", active: true, shallow: true, req: { fam: { sword: 2500 } }, hint: "Deal sword damage." },
+    splinter_hewn: { id: "splinter_hewn", abId: "splinter_hewn", name: "Splinter Hewn", icon: "🪓", active: true, shallow: true, req: { fam: { axe: 2500 } }, hint: "Deal axe damage." },
+    wasp_sting: { id: "wasp_sting", abId: "wasp_sting", name: "Wasp Sting", icon: "🐝", active: true, shallow: true, req: { fam: { dagger: 2500 } }, hint: "Deal dagger damage." },
+    knockback_tap: { id: "knockback_tap", abId: "knockback_tap", name: "Knockback Tap", icon: "🔨", active: true, shallow: true, req: { fam: { hammer: 2500 } }, hint: "Deal hammer damage." },
+    short_lunge: { id: "short_lunge", abId: "short_lunge", name: "Short Lunge", icon: "🔱", active: true, shallow: true, req: { fam: { spear: 2500 } }, hint: "Deal spear damage." },
+    twin_nock: { id: "twin_nock", abId: "twin_nock", name: "Twin Nock", icon: "🏹", active: true, shallow: true, req: { fam: { bow: 2500 } }, hint: "Deal bow damage." },
+    wrist_snap: { id: "wrist_snap", abId: "wrist_snap", name: "Wrist Snap", icon: "🪢", active: true, shallow: true, req: { fam: { whip: 2500 } }, hint: "Deal whip damage." },
+    palm_star: { id: "palm_star", abId: "palm_star", name: "Palm Star", icon: "✴️", active: true, shallow: true, req: { fam: { thrown: 2000 } }, hint: "Deal thrown damage (shurikens, bombs)." },
+    brace_bash: { id: "brace_bash", abId: "brace_bash", name: "Brace Bash", icon: "🧱", active: true, shallow: true, req: { fam: { shield: 1500 } }, hint: "Parry blows and turn them back." },
   };
   // ---- tiered arsenals: who may wield what magic ----
   // Spells are tiered hedge (T1) -> battle (T2) -> war (T3) -> cataclysm (T4).
@@ -537,7 +568,60 @@ window.CFG = (() => {
     skullsplitter: 2, spiral_pike: 2, avalanche: 2, cinder_edge: 2,
     dragon_coil: 2, thorn_reign: 2, comet_shot: 2, stalwart_reflector: 2,
     hammerfell_impact: 3, thundering_crack: 3, whirlwind_slinger: 3, locust_swarm: 3,
+  }
+  // ---- deep-art spell inheritance: active deep arts gain every unlocked ----
+  // rank of thematically linked spell trees (one-way, like SPELL_PARENTS —
+  // the spell never gains from the art). Each entry lists the TOP of the
+  // spell chain; the art gains the whole lineage (e.g. ["thunder_hex"]
+  // also brings Lightning, since Thunder Hex inherits Lightning).
+  const TECH_SPELL_INHERIT = {
+    holy_sword: ["smite"],
+    cinder_edge: ["immolate"],
+    skullsplitter: [],
+    avalanche: ["glacier", "frostbite"],
+    tempest_lance: ["thunder_hex"],
+    viper_flurry: ["toxic_stab"],
+    iron_palm: [],
+    feint_attack: ["shadowstep"],
+    spiral_pike: ["whirlwind"],
+    dragon_coil: ["toxic_stab"],
+    thorn_reign: ["venom"],
+    comet_shot: ["line_of_fire"],
+    exploding_shuriken: ["immolate"],
+    slime_shuriken: ["water_jet", "venom"],
+    hammerfell_impact: ["tornado"],
+    shadow_disciples: ["shadowstep"],
+    stalwart_reflector: ["shieldwall"],
+    locust_swarm: ["venom"],
+    thundering_crack: ["thunder_hex"],
+    whirlwind_slinger: ["whirlwind"],
   };
+  // ---- deep-art shallow inheritance: each deep art gains every unlocked ----
+  // rank of its weapon family's shallow-art tree(s) (one-way — the shallow
+  // art never gains from the deep art).
+  const TECH_SHALLOW_INHERIT = {
+    holy_sword: ["glancing_arc", "faux_chop"],
+    cinder_edge: ["glancing_arc", "faux_chop"],
+    skullsplitter: ["splinter_hewn", "faux_chop"],
+    avalanche: ["knockback_tap"],
+    tempest_lance: ["short_lunge"],
+    viper_flurry: ["wasp_sting", "faux_chop"],
+    iron_palm: ["flowing_strikes", "one_armed_guard"],
+    feint_attack: ["wasp_sting", "faux_chop"],
+    spiral_pike: ["short_lunge"],
+    dragon_coil: ["short_lunge"],
+    thorn_reign: ["twin_nock"],
+    comet_shot: ["twin_nock"],
+    exploding_shuriken: ["palm_star"],
+    slime_shuriken: ["palm_star"],
+    hammerfell_impact: ["knockback_tap"],
+    shadow_disciples: ["flowing_strikes", "one_armed_guard"],
+    stalwart_reflector: ["brace_bash"],
+    locust_swarm: ["wrist_snap"],
+    thundering_crack: ["wrist_snap"],
+    whirlwind_slinger: ["wrist_snap"],
+  };
+;
   // Max spell/tech tier a warlord's bonus arsenal reaches (template signatures
   // + self-care always stay, whatever their tier).
   const BOSS_MAGIC_TIER = { 1: 1, 2: 2, 3: 2, 4: 3, 5: 4, 6: 4 };
@@ -545,6 +629,25 @@ window.CFG = (() => {
   // apex horrors earn a cataclysm + deeper arts. Mimics are exempt: their
   // teeth (percent hunger) are the threat, never a sky falling on an ambush.
  const MOB_ARSENAL = { POWER_XP: 100, APEX_XP: 150 };
+  // ---- mob spell gating (non-boss): level AND kind power both cap the ----
+  // spell tiers a wild mob may field (bosses are exempt — delve depth tiers
+  // them instead). Level: under LV_BASIC only hedge (T1) spells; under LV_WAR
+  // battle (T2) spells; LV_WAR+ may rise to the kind's cap. Kind (template
+  // XP): XP_MID+ battle, POWER_XP+ war (T3), APEX_XP+ cataclysms (T4); weaker
+  // kinds never rise above hedge no matter their level — a lv 60 goblin
+  // still throws basics, never a cataclysm.
+  const MOB_SPELL_GATE = { LV_BASIC: 15, LV_WAR: 40, XP_MID: 40 };
+  // ---- NPC progression (Dec 2026): townsfolk grow with their level the way ----
+  // wild mobs do — better steel + deeper spells — but never cataclysms (angels
+  // alone touch those). Level: under LV_BASIC hedge (T1) bonus spells; under
+  // LV_WAR battle (T2); LV_WAR+ war (T3: blessed_weapon/panacea) + a deep art
+  // matching the wielded weapon (T1 arts at LV_ART1, T2 at LV_WAR). Angels and
+  // civilized demons run hotter bodies than surf folk (see ANGEL_ROLES /
+  // CIV_DEMON_ROLES + roleMult), and EVERY angel carries at least one
+  // cataclysm or deep art (see Entities.ensureAngelPower).
+  const NPC_SPELL_GATE = { LV_BASIC: 15, LV_ART1: 20, LV_WAR: 40, LV_ART3: 60 };
+  const ANGEL_ROLES = ["dawn_angel", "choir_angel", "seraph_guard", "scroll_angel", "angel_guard", "angel_merchant", "angel_priest"];
+  const CIV_DEMON_ROLES = ["civilized_succubus", "civilized_infernal", "civilized_hellbeast", "civilized_doom", "hell_priest", "hell_merchant", "hell_guard"];
  const MIMIC_KINDS = ["lesser_mimic", "mimic", "greater_mimic", "mimic_devourer"];
   // Doppelganger infiltrator: disguised as townsfolk/adventurers, mimic-style
   // ambush teeth + party betrayal. Marked ONLY at spawn (see AIDirector).
@@ -714,16 +817,16 @@ window.CFG = (() => {
     // lv 35 in spawn code; bosses the same.
     orc_grunt: { name: "Orc Grunt", hp: 95, mp: 8, atk: 20, def: 7, spd: 2.8, xp: 70, abilities: ["whirlwind"], tint: "#4a7a2a", body: "brute" },
     orc_shaman: { name: "Orc Shaman", hp: 80, mp: 40, atk: 19, def: 5, spd: 2.8, xp: 85, abilities: ["fireball", "heal"], tint: "#6a9a2a", body: "humanoid" },
-    orc_warchief: { name: "Orc Warchief", hp: 720, mp: 70, atk: 30, def: 4, spd: 3.0, xp: 420, abilities: ["whirlwind", "immolate", "heal", "panacea"], tint: "#3a5a1a", body: "brute", boss: true },
+    orc_warchief: { name: "Orc Warchief", hp: 720, mp: 70, atk: 90, def: 4, spd: 3.0, xp: 420, abilities: ["whirlwind", "immolate", "heal", "panacea"], tint: "#3a5a1a", body: "brute", boss: true },
     goblin_brute: { name: "Goblin Brute", hp: 110, mp: 6, atk: 21, def: 8, spd: 2.6, xp: 75, abilities: ["whirlwind"], tint: "#2a6a2a", body: "brute" },
-    bandit_warlord: { name: "Bandit Warlord", hp: 380, mp: 50, atk: 28, def: 4, spd: 3.4, xp: 380, abilities: ["whirlwind", "venom", "heal", "panacea"], tint: "#5a2a1a", body: "humanoid", boss: true },
+    bandit_warlord: { name: "Bandit Warlord", hp: 380, mp: 50, atk: 84, def: 4, spd: 3.4, xp: 380, abilities: ["whirlwind", "venom", "heal", "panacea"], tint: "#5a2a1a", body: "humanoid", boss: true },
     kobold_shaman: { name: "Kobold Shaman", hp: 48, mp: 30, atk: 13, def: 4, spd: 3.6, xp: 44, abilities: ["fireball"], tint: "#6a8a2a", body: "humanoid" },
-    kobold_king: { name: "Kobold King", hp: 360, mp: 90, atk: 27, def: 4, spd: 3.6, xp: 400, abilities: ["whirlwind", "fireball", "heal", "panacea"], tint: "#8aaa3a", body: "humanoid", boss: true },
+    kobold_king: { name: "Kobold King", hp: 360, mp: 90, atk: 81, def: 4, spd: 3.6, xp: 400, abilities: ["whirlwind", "fireball", "heal", "panacea"], tint: "#8aaa3a", body: "humanoid", boss: true },
     gnoll: { name: "Gnoll", hp: 85, mp: 6, atk: 19, def: 6, spd: 4.2, xp: 65, abilities: ["whirlwind"], tint: "#9a7a4a", body: "beast" },
     gnoll_hunter: { name: "Gnoll Hunter", hp: 70, mp: 10, atk: 18, def: 5, spd: 4.4, xp: 68, archer: true, abilities: [], tint: "#7a5a3a", body: "beast" },
-    gnoll_alpha: { name: "Gnoll Alpha", hp: 400, mp: 60, atk: 29, def: 4, spd: 4.4, xp: 410, abilities: ["whirlwind", "venom", "heal", "panacea"], tint: "#b08a4a", body: "beast", boss: true },
-    harpy_matriarch: { name: "Harpy Matriarch", hp: 600, mp: 110, atk: 29, def: 4, spd: 5.0, xp: 430, archer: true, abilities: ["whirlwind", "lightning", "heal", "panacea"], tint: "#c09ae9", body: "winged", boss: true },
-    troll_king: { name: "Troll King", hp: 760, mp: 50, atk: 31, def: 4, spd: 2.2, xp: 430, abilities: ["whirlwind", "shieldwall", "heal", "panacea"], tint: "#4a6a4a", body: "brute", boss: true },
+    gnoll_alpha: { name: "Gnoll Alpha", hp: 400, mp: 60, atk: 87, def: 4, spd: 4.4, xp: 410, abilities: ["whirlwind", "venom", "heal", "panacea"], tint: "#b08a4a", body: "beast", boss: true },
+    harpy_matriarch: { name: "Harpy Matriarch", hp: 600, mp: 110, atk: 87, def: 4, spd: 5.0, xp: 430, archer: true, abilities: ["whirlwind", "lightning", "heal", "panacea"], tint: "#c09ae9", body: "winged", boss: true },
+    troll_king: { name: "Troll King", hp: 760, mp: 50, atk: 93, def: 4, spd: 2.2, xp: 430, abilities: ["whirlwind", "shieldwall", "heal", "panacea"], tint: "#4a6a4a", body: "brute", boss: true },
     slime_empress: { name: "Slime Empress", hp: 140, mp: 40, atk: 20, def: 6, spd: 2.4, xp: 115, abilities: ["tideburst", "venom"], tint: "#ff6ad9", body: "blob" },
     wyvern_fledgling: { name: "Wyvern Fledgling", hp: 90, mp: 20, atk: 20, def: 5, spd: 4.4, xp: 85, abilities: ["fireball"], tint: "#5a9a4d", body: "winged" },
     // ---- deep wilds: dark forests, tundra, seas, peaks ----
@@ -751,13 +854,13 @@ window.CFG = (() => {
     cinder_maw: { name: "Cinder Maw", hp: 155, mp: 24, atk: 27, def: 9, spd: 3.0, xp: 150, abilities: ["fireball", "immolate", "whirlwind"], tint: "#8a1f0e", body: "beast", lavaBorn: true, diver: true },
     // ---- leviathan deep: the drowned water dungeon's own horrors ----
     // Every one dives (aquatic + diver), so the whole delve dodges underwater.
-    leviathan: { name: "Leviathan", hp: 2880, mp: 230, atk: 46, def: 3, spd: 3.6, xp: 850, abilities: ["tideburst", "tidal_wave", "lightning", "glacier", "whirlwind", "heal", "panacea"], tint: "#123a52", body: "serpent", aquatic: true, diver: true, boss: true },
+    leviathan: { name: "Leviathan", hp: 2880, mp: 230, atk: 138, def: 3, spd: 3.6, xp: 850, abilities: ["tideburst", "tidal_wave", "lightning", "glacier", "whirlwind", "heal", "panacea"], tint: "#123a52", body: "serpent", aquatic: true, diver: true, boss: true },
     abyss_tentacle: { name: "Abyss Tentacle", hp: 120, mp: 30, atk: 24, def: 8, spd: 3.2, xp: 110, abilities: ["tideburst", "venom"], tint: "#5a2a6a", body: "serpent", aquatic: true, diver: true },
     // ---- shallow-water lords: flooded halls and drowned wrecks needed
     // tier-1/2 warlords of their own, not borrowed pirates — all dive.
-    drowned_captain: { name: "Drowned Captain", hp: 380, mp: 80, atk: 28, def: 4, spd: 3.2, xp: 390, abilities: ["tideburst", "whirlwind", "heal", "panacea"], tint: "#2a5a6a", body: "undead", boss: true, undead: true, aquatic: true, diver: true },
-    kappa_king: { name: "Kappa King", hp: 690, mp: 100, atk: 28, def: 4, spd: 3.4, xp: 400, abilities: ["tideburst", "venom", "whirlwind", "heal", "panacea"], tint: "#2f8a4f", body: "humanoid", boss: true, aquatic: true, diver: true },
-    rusalka_queen: { name: "Rusalka Queen", hp: 1000, mp: 140, atk: 30, def: 4, spd: 3.6, xp: 440, abilities: ["tideburst", "dazzle", "thunder_hex", "heal", "panacea"], tint: "#7ad9c9", body: "ghost", boss: true, undead: true, aquatic: true, diver: true },
+    drowned_captain: { name: "Drowned Captain", hp: 380, mp: 80, atk: 84, def: 4, spd: 3.2, xp: 390, abilities: ["tideburst", "whirlwind", "heal", "panacea"], tint: "#2a5a6a", body: "undead", boss: true, undead: true, aquatic: true, diver: true },
+    kappa_king: { name: "Kappa King", hp: 690, mp: 100, atk: 84, def: 4, spd: 3.4, xp: 400, abilities: ["tideburst", "venom", "whirlwind", "heal", "panacea"], tint: "#2f8a4f", body: "humanoid", boss: true, aquatic: true, diver: true },
+    rusalka_queen: { name: "Rusalka Queen", hp: 1000, mp: 140, atk: 90, def: 4, spd: 3.6, xp: 440, abilities: ["tideburst", "dazzle", "thunder_hex", "heal", "panacea"], tint: "#7ad9c9", body: "ghost", boss: true, undead: true, aquatic: true, diver: true },
     // ---- mimic family: chest-teeth in four strengths + a gate that lies ----
     // Lesser is a pale mossy chest with one eye (early floors); the classic
     // Mimic sits in the middle; Greater is iron-banded with claw arms; the
@@ -770,8 +873,8 @@ window.CFG = (() => {
     greater_mimic: { name: "Greater Mimic", hp: 220, mp: 60, atk: 32, def: 11, spd: 3.6, xp: 220, abilities: ["whirlwind", "venom", "immolate"], tint: "#5a2a3a", body: "blob" },
    mimic_devourer: { name: "Mimic Devourer", hp: 320, mp: 90, atk: 38, def: 13, spd: 3.8, xp: 340, abilities: ["whirlwind", "venom", "glacier", "immolate", "tideburst"], tint: "#8a1a4a", body: "blob" },
     doppelganger: { name: "Doppelganger", hp: 200, mp: 60, atk: 28, def: 10, spd: 3.6, xp: 200, abilities: ["whirlwind", "venom", "dazzle"], tint: "#6a4a8a", body: "humanoid" },
-   portal_devourer: { name: "Threshold Devourer", hp: 520, mp: 140, atk: 34, def: 2, spd: 3.2, xp: 600, abilities: ["whirlwind", "venom", "glacier", "lightning", "heal", "panacea"], tint: "#4a2a8a", body: "construct", boss: true },
-    voidstalker: { name: "Voidstalker", hp: 2640, mp: 230, atk: 42, def: 2, spd: 4.6, xp: 760, abilities: ["shadowstep", "venom", "lightning", "whirlwind", "heal", "panacea"], tint: "#1a0f2e", body: "humanoid", boss: true },
+   portal_devourer: { name: "Threshold Devourer", hp: 520, mp: 140, atk: 102, def: 2, spd: 3.2, xp: 600, abilities: ["whirlwind", "venom", "glacier", "lightning", "heal", "panacea"], tint: "#4a2a8a", body: "construct", boss: true },
+    voidstalker: { name: "Voidstalker", hp: 2640, mp: 230, atk: 126, def: 2, spd: 4.6, xp: 760, abilities: ["shadowstep", "venom", "lightning", "whirlwind", "heal", "panacea"], tint: "#1a0f2e", body: "humanoid", boss: true },
    // ---- elemental apex: volcanoes and mountain peaks ----
    phoenix:  { name: "Phoenix", hp: 120, mp: 60, atk: 24, def: 6, spd: 4.8, xp: 130, abilities: ["fireball", "immolate", "dazzle"], tint: "#ff7b2e", body: "winged" },
    yeti:     { name: "Yeti", hp: 150, mp: 30, atk: 26, def: 10, spd: 3.0, xp: 140, abilities: ["glacier", "frostbite"], tint: "#dfe9f2", body: "brute" },
@@ -791,33 +894,33 @@ window.CFG = (() => {
     bandit:   { name: "Bandit", hp: 52, mp: 6, atk: 14, def: 4, spd: 3.4, xp: 40, archer: true, abilities: [], tint: "#8a5a33", body: "humanoid" },
     outlaw:   { name: "Outlaw", hp: 70, mp: 12, atk: 17, def: 5, spd: 3.6, xp: 58, archer: true, abilities: ["whirlwind"], tint: "#5a3a5a", body: "humanoid" },
     murderer: { name: "Murderer", hp: 95, mp: 18, atk: 21, def: 6, spd: 4.0, xp: 85, abilities: ["venom", "whirlwind"], tint: "#7a1f1f", body: "humanoid" },
-    boss:     { name: "Dungeon Lord", hp: 320, mp: 60, atk: 24, def: 4, spd: 3.0, xp: 300, abilities: ["fireball", "whirlwind", "frostbite", "heal", "panacea"], tint: "#ff3b3b", body: "brute", boss: true, undead: true },
+    boss:     { name: "Dungeon Lord", hp: 320, mp: 60, atk: 72, def: 4, spd: 3.0, xp: 300, abilities: ["fireball", "whirlwind", "frostbite", "heal", "panacea"], tint: "#ff3b3b", body: "brute", boss: true, undead: true },
     // ---- mythic bosses: one per delve, picked by delve seed + floor ----
-    goblin_king: { name: "Goblin King", hp: 380, mp: 80, atk: 28, def: 4, spd: 3.2, xp: 380, archer: true, abilities: ["whirlwind", "heal", "panacea"], tint: "#2f8a2f", body: "humanoid", boss: true },
-    slime_sovereign: { name: "Slime Sovereign", hp: 750, mp: 120, atk: 26, def: 4, spd: 2.4, xp: 420, abilities: ["tideburst", "venom", "whirlwind", "heal", "panacea"], tint: "#ff4ad9", body: "blob", boss: true },
-    skeleton_warlord: { name: "Skeleton Warlord", hp: 420, mp: 80, atk: 30, def: 4, spd: 3.0, xp: 430, abilities: ["whirlwind", "shieldwall", "heal", "panacea"], tint: "#f0f0f0", body: "undead", boss: true, undead: true },
-    wraith_sovereign: { name: "Wraith Sovereign", hp: 1140, mp: 170, atk: 32, def: 4, spd: 3.6, xp: 510, abilities: ["frostbite", "fireball", "thunder_hex", "heal", "panacea"], tint: "#59d6d6", body: "ghost", boss: true, undead: true },
-    cultist_hierophant: { name: "Hierophant of the Pit", hp: 380, mp: 160, atk: 28, def: 4, spd: 2.8, xp: 450, abilities: ["fireball", "immolate", "lightning", "heal", "panacea"], tint: "#4a1a6a", body: "humanoid", boss: true },
-    wyvern_matriarch: { name: "Wyvern Matriarch", hp: 2700, mp: 190, atk: 42, def: 3, spd: 4.4, xp: 700, abilities: ["fireball", "immolate", "whirlwind", "heal", "panacea"], tint: "#3f7d3a", body: "winged", boss: true },
-    minotaur_warlord: { name: "Minotaur Warlord", hp: 1040, mp: 90, atk: 36, def: 6, spd: 3.0, xp: 580, abilities: ["whirlwind", "shieldwall", "heal", "panacea"], tint: "#5a3a22", body: "brute", boss: true },
-    medusa_queen: { name: "Medusa Queen", hp: 1170, mp: 170, atk: 32, def: 4, spd: 3.2, xp: 560, abilities: ["venom", "glacier", "dazzle", "heal", "panacea"], tint: "#3a8a3a", body: "serpent", boss: true },
-    jotunn_jarl: { name: "Jötunn Jarl", hp: 2740, mp: 170, atk: 44, def: 3, spd: 2.8, xp: 720, abilities: ["glacier", "whirlwind", "frostbite", "heal", "panacea"], tint: "#9ab8d9", body: "brute", boss: true },
-    draugr_king: { name: "Draugr King", hp: 1020, mp: 120, atk: 34, def: 6, spd: 2.6, xp: 590, abilities: ["shieldwall", "venom", "heal", "panacea"], tint: "#4a5a4a", body: "undead", boss: true, undead: true },
-    cursed_pharaoh: { name: "Cursed Pharaoh", hp: 1290, mp: 190, atk: 32, def: 4, spd: 2.6, xp: 610, abilities: ["thunder_hex", "fireball", "shieldwall", "heal", "panacea"], tint: "#d9b96a", body: "undead", boss: true, undead: true },
-    oni_daimyo: { name: "Oni Daimyō", hp: 1640, mp: 140, atk: 40, def: 6, spd: 3.0, xp: 660, abilities: ["whirlwind", "immolate", "heal", "panacea"], tint: "#c93b3b", body: "brute", boss: true },
-    tengu_stormlord: { name: "Tengu Stormlord", hp: 1500, mp: 200, atk: 34, def: 4, spd: 4.6, xp: 620, abilities: ["lightning", "tornado", "heal", "panacea"], tint: "#1a1a2a", body: "winged", boss: true },
-    kitsune_ninetails: { name: "Nine-Tailed Kitsune", hp: 1510, mp: 220, atk: 34, def: 4, spd: 4.4, xp: 670, abilities: ["fireball", "dazzle", "glacier", "heal", "panacea"], tint: "#f08a2a", body: "beast", boss: true },
-    naga_raja: { name: "Nāga Rājā", hp: 1560, mp: 200, atk: 37, def: 4, spd: 3.6, xp: 650, abilities: ["venom", "lightning", "tideburst", "heal", "panacea"], tint: "#2a8a5a", body: "serpent", boss: true },
-    rakshasa_maharaja: { name: "Rakshasa Maharaja", hp: 1560, mp: 210, atk: 37, def: 4, spd: 3.4, xp: 670, abilities: ["fireball", "dazzle", "heal", "panacea"], tint: "#c96a1a", body: "humanoid", boss: true },
-    hydra_broodmother: { name: "Hydra Broodmother", hp: 2800, mp: 210, atk: 44, def: 3, spd: 2.8, xp: 780, abilities: ["venom", "whirlwind", "tideburst", "tidal_wave", "heal", "panacea"], tint: "#1e6a36", body: "serpent", aquatic: true, diver: true, boss: true },
-    fenrir_alpha: { name: "Fenrir Alpha", hp: 2700, mp: 150, atk: 43, def: 2, spd: 5.0, xp: 740, abilities: ["whirlwind", "lightning", "heal", "panacea"], tint: "#23232e", body: "beast", boss: true },
-    dullahan_lord: { name: "Dullahan Lord", hp: 2080, mp: 180, atk: 39, def: 2, spd: 4.4, xp: 640, abilities: ["frostbite", "thunder_hex", "heal", "panacea"], tint: "#1a1a24", body: "undead", boss: true, undead: true },
-    baba_yaga: { name: "Baba Yaga", hp: 2060, mp: 250, atk: 36, def: 2, spd: 3.2, xp: 700, abilities: ["immolate", "thunder_hex", "venom", "heal", "panacea"], tint: "#5a3a6a", body: "humanoid", boss: true },
+    goblin_king: { name: "Goblin King", hp: 380, mp: 80, atk: 84, def: 4, spd: 3.2, xp: 380, archer: true, abilities: ["whirlwind", "heal", "panacea"], tint: "#2f8a2f", body: "humanoid", boss: true },
+    slime_sovereign: { name: "Slime Sovereign", hp: 750, mp: 120, atk: 78, def: 4, spd: 2.4, xp: 420, abilities: ["tideburst", "venom", "whirlwind", "heal", "panacea"], tint: "#ff4ad9", body: "blob", boss: true },
+    skeleton_warlord: { name: "Skeleton Warlord", hp: 420, mp: 80, atk: 90, def: 4, spd: 3.0, xp: 430, abilities: ["whirlwind", "shieldwall", "heal", "panacea"], tint: "#f0f0f0", body: "undead", boss: true, undead: true },
+    wraith_sovereign: { name: "Wraith Sovereign", hp: 1140, mp: 170, atk: 96, def: 4, spd: 3.6, xp: 510, abilities: ["frostbite", "fireball", "thunder_hex", "heal", "panacea"], tint: "#59d6d6", body: "ghost", boss: true, undead: true },
+    cultist_hierophant: { name: "Hierophant of the Pit", hp: 380, mp: 160, atk: 84, def: 4, spd: 2.8, xp: 450, abilities: ["fireball", "immolate", "lightning", "heal", "panacea"], tint: "#4a1a6a", body: "humanoid", boss: true },
+    wyvern_matriarch: { name: "Wyvern Matriarch", hp: 2700, mp: 190, atk: 126, def: 3, spd: 4.4, xp: 700, abilities: ["fireball", "immolate", "whirlwind", "heal", "panacea"], tint: "#3f7d3a", body: "winged", boss: true },
+    minotaur_warlord: { name: "Minotaur Warlord", hp: 1040, mp: 90, atk: 108, def: 6, spd: 3.0, xp: 580, abilities: ["whirlwind", "shieldwall", "heal", "panacea"], tint: "#5a3a22", body: "brute", boss: true },
+    medusa_queen: { name: "Medusa Queen", hp: 1170, mp: 170, atk: 96, def: 4, spd: 3.2, xp: 560, abilities: ["venom", "glacier", "dazzle", "heal", "panacea"], tint: "#3a8a3a", body: "serpent", boss: true },
+    jotunn_jarl: { name: "Jötunn Jarl", hp: 2740, mp: 170, atk: 132, def: 3, spd: 2.8, xp: 720, abilities: ["glacier", "whirlwind", "frostbite", "heal", "panacea"], tint: "#9ab8d9", body: "brute", boss: true },
+    draugr_king: { name: "Draugr King", hp: 1020, mp: 120, atk: 102, def: 6, spd: 2.6, xp: 590, abilities: ["shieldwall", "venom", "heal", "panacea"], tint: "#4a5a4a", body: "undead", boss: true, undead: true },
+    cursed_pharaoh: { name: "Cursed Pharaoh", hp: 1290, mp: 190, atk: 96, def: 4, spd: 2.6, xp: 610, abilities: ["thunder_hex", "fireball", "shieldwall", "heal", "panacea"], tint: "#d9b96a", body: "undead", boss: true, undead: true },
+    oni_daimyo: { name: "Oni Daimyō", hp: 1640, mp: 140, atk: 120, def: 6, spd: 3.0, xp: 660, abilities: ["whirlwind", "immolate", "heal", "panacea"], tint: "#c93b3b", body: "brute", boss: true },
+    tengu_stormlord: { name: "Tengu Stormlord", hp: 1500, mp: 200, atk: 102, def: 4, spd: 4.6, xp: 620, abilities: ["lightning", "tornado", "heal", "panacea"], tint: "#1a1a2a", body: "winged", boss: true },
+    kitsune_ninetails: { name: "Nine-Tailed Kitsune", hp: 1510, mp: 220, atk: 102, def: 4, spd: 4.4, xp: 670, abilities: ["fireball", "dazzle", "glacier", "heal", "panacea"], tint: "#f08a2a", body: "beast", boss: true },
+    naga_raja: { name: "Nāga Rājā", hp: 1560, mp: 200, atk: 111, def: 4, spd: 3.6, xp: 650, abilities: ["venom", "lightning", "tideburst", "heal", "panacea"], tint: "#2a8a5a", body: "serpent", boss: true },
+    rakshasa_maharaja: { name: "Rakshasa Maharaja", hp: 1560, mp: 210, atk: 111, def: 4, spd: 3.4, xp: 670, abilities: ["fireball", "dazzle", "heal", "panacea"], tint: "#c96a1a", body: "humanoid", boss: true },
+    hydra_broodmother: { name: "Hydra Broodmother", hp: 2800, mp: 210, atk: 132, def: 3, spd: 2.8, xp: 780, abilities: ["venom", "whirlwind", "tideburst", "tidal_wave", "heal", "panacea"], tint: "#1e6a36", body: "serpent", aquatic: true, diver: true, boss: true },
+    fenrir_alpha: { name: "Fenrir Alpha", hp: 1100, mp: 150, atk: 99, def: 4, spd: 4.2, xp: 570, abilities: ["whirlwind", "lightning", "heal", "panacea"], tint: "#23232e", body: "beast", boss: true },
+    dullahan_lord: { name: "Dullahan Lord", hp: 2080, mp: 180, atk: 117, def: 2, spd: 4.4, xp: 640, abilities: ["frostbite", "thunder_hex", "heal", "panacea"], tint: "#1a1a24", body: "undead", boss: true, undead: true },
+    baba_yaga: { name: "Baba Yaga", hp: 2060, mp: 250, atk: 108, def: 2, spd: 3.2, xp: 700, abilities: ["immolate", "thunder_hex", "venom", "heal", "panacea"], tint: "#5a3a6a", body: "humanoid", boss: true },
     // ---- insect bosses: broodmother, colony queen, sting emperor ----
-    tarantula_broodmother: { name: "Tarantula Broodmother", hp: 1020, mp: 150, atk: 34, def: 4, spd: 3.4, xp: 600, abilities: ["venom", "glacier", "whirlwind", "heal", "panacea"], tint: "#3a1a4a", body: "swarm", boss: true },
-    joker: { name: "The Joker", hp: 1180, mp: 180, atk: 33, def: 4, spd: 3.8, xp: 600, abilities: ["dazzle", "thunder_hex", "fireball", "heal", "panacea"], tint: "#8a4ad9", body: "humanoid", boss: true },
-    siege_queen: { name: "Siege Ant Queen", hp: 1640, mp: 120, atk: 36, def: 6, spd: 2.4, xp: 680, abilities: ["shieldwall", "whirlwind", "venom", "heal", "panacea"], tint: "#5a2a0a", body: "swarm", boss: true, diver: true, burrower: true },
-   scorpion_emperor: { name: "Scorpion Emperor", hp: 1580, mp: 140, atk: 38, def: 6, spd: 3.2, xp: 660, abilities: ["venom", "immolate", "whirlwind", "heal", "panacea"], tint: "#8a6a10", body: "swarm", boss: true },
+    tarantula_broodmother: { name: "Tarantula Broodmother", hp: 1020, mp: 150, atk: 102, def: 4, spd: 3.4, xp: 600, abilities: ["venom", "glacier", "whirlwind", "heal", "panacea"], tint: "#3a1a4a", body: "swarm", boss: true },
+    joker: { name: "The Joker", hp: 1180, mp: 180, atk: 99, def: 4, spd: 3.8, xp: 600, abilities: ["dazzle", "thunder_hex", "fireball", "heal", "panacea"], tint: "#8a4ad9", body: "humanoid", boss: true },
+    siege_queen: { name: "Siege Ant Queen", hp: 1640, mp: 120, atk: 108, def: 6, spd: 2.4, xp: 680, abilities: ["shieldwall", "whirlwind", "venom", "heal", "panacea"], tint: "#5a2a0a", body: "swarm", boss: true, diver: true, burrower: true },
+   scorpion_emperor: { name: "Scorpion Emperor", hp: 1580, mp: 140, atk: 114, def: 6, spd: 3.2, xp: 660, abilities: ["venom", "immolate", "whirlwind", "heal", "panacea"], tint: "#8a6a10", body: "swarm", boss: true },
     // ---- HELL DIMENSION (v16): high-stat fiends of the far continent ----
     // Base stats run hotter than any surface wilds — hell curve starts where
     // the surface caps. Each kind has a unique mechanic (see game.js hell tick
@@ -828,18 +931,18 @@ window.CFG = (() => {
     infernal: { name: "Infernal", hp: 380, mp: 100, atk: 44, def: 18, spd: 2.6, xp: 420, abilities: ["immolate", "shieldwall"], tint: "#ff5a1a", body: "brute", lavaBorn: true, demon: true },
     hell_hound: { name: "Hell Hound", hp: 300, mp: 20, atk: 40, def: 12, spd: 5.2, xp: 350, abilities: ["whirlwind", "immolate"], tint: "#5a0a0a", body: "beast", tamable: true, mount: { speed: 1.6, swim: false }, demon: true },
     // ---- hell dungeon warlords (bizarre deep-hell abilities) ----
-    infernal_overlord: { name: "Infernal Overlord", hp: 3200, mp: 260, atk: 65, def: 4, spd: 3.0, xp: 1200, abilities: ["immolate", "meteorfall", "whirlwind", "heal", "panacea"], tint: "#ff3a00", body: "brute", boss: true, lavaBorn: true, demon: true },
-    succubus_matriarch: { name: "Succubus Matriarch", hp: 3050, mp: 380, atk: 60, def: 3, spd: 4.4, xp: 1250, abilities: ["dazzle", "venom", "thunder_hex", "panacea", "heal"], tint: "#ff6ab0", body: "humanoid", boss: true, demon: true },
-    doom_tyrant: { name: "Doom Tyrant", hp: 4350, mp: 280, atk: 70, def: 5, spd: 3.2, xp: 1400, abilities: ["immolate", "energy_beam", "whirlwind", "heal", "panacea"], tint: "#1a0505", body: "brute", boss: true, demon: true },
-    hell_magus: { name: "Hell Magus", hp: 3950, mp: 420, atk: 62, def: 3, spd: 3.6, xp: 1300, abilities: ["immolate", "thunder_hex", "whiteout", "heal", "panacea"], tint: "#6a0a8a", body: "humanoid", boss: true, demon: true },
-    peter_the_fallen: { name: "Peter the Fallen", hp: 8225, mp: 850, atk: 110, def: 4, spd: 4.8, xp: 8000, abilities: ["immolate", "meteorfall", "energy_beam", "tideburst", "heal", "panacea", "wind_cutter", "storm_of_blades", "whirlpool", "primordial_sea", "line_of_fire", "raging_volcano", "icicle_line", "crystal_prison", "burning_light", "toxic_stab", "barbed_plague", "tamisra", "void_hole", "life_drain", "blood_hole"], tint: "#0a0a0a", body: "brute", boss: true, demon: true },
+    infernal_overlord: { name: "Infernal Overlord", hp: 3200, mp: 260, atk: 195, def: 4, spd: 3.0, xp: 1200, abilities: ["immolate", "meteorfall", "whirlwind", "heal", "panacea"], tint: "#ff3a00", body: "brute", boss: true, lavaBorn: true, demon: true },
+    succubus_matriarch: { name: "Succubus Matriarch", hp: 3050, mp: 380, atk: 180, def: 3, spd: 4.4, xp: 1250, abilities: ["dazzle", "venom", "thunder_hex", "panacea", "heal"], tint: "#ff6ab0", body: "humanoid", boss: true, demon: true },
+    doom_tyrant: { name: "Doom Tyrant", hp: 4350, mp: 280, atk: 210, def: 5, spd: 3.2, xp: 1400, abilities: ["immolate", "energy_beam", "whirlwind", "heal", "panacea"], tint: "#1a0505", body: "brute", boss: true, demon: true },
+    hell_magus: { name: "Hell Magus", hp: 3950, mp: 420, atk: 186, def: 3, spd: 3.6, xp: 1300, abilities: ["immolate", "thunder_hex", "whiteout", "heal", "panacea"], tint: "#6a0a8a", body: "humanoid", boss: true, demon: true },
+    peter_the_fallen: { name: "Peter the Fallen", hp: 8225, mp: 850, atk: 330, def: 4, spd: 4.8, xp: 8000, abilities: ["immolate", "meteorfall", "energy_beam", "tideburst", "heal", "panacea", "wind_cutter", "storm_of_blades", "whirlpool", "primordial_sea", "line_of_fire", "raging_volcano", "icicle_line", "crystal_prison", "burning_light", "toxic_stab", "barbed_plague", "tamisra", "void_hole", "life_drain", "blood_hole"], tint: "#0a0a0a", body: "brute", boss: true, demon: true },
   };
   // Boss roster for per-delve picks (legacy "boss" = Dungeon Lord stays first).
   // Full 29-kind rotation: every boss:true template except the lying-gate
   // portal_devourer (which only ever wears the way-down portal). Order is
   // tier-ascending so fallbacks stay weak; bossKindFor() enforces min depth
   // + theme matching on top (see BOSS_MIN_EFF / BOSS_THEMES).
- const BOSS_KINDS = ["boss", "goblin_king", "skeleton_warlord", "kobold_king", "bandit_warlord", "gnoll_alpha", "cultist_hierophant", "drowned_captain", "slime_sovereign", "kappa_king", "orc_warchief", "troll_king", "harpy_matriarch", "rusalka_queen", "wraith_sovereign", "tarantula_broodmother", "joker", "minotaur_warlord", "draugr_king", "cursed_pharaoh", "medusa_queen", "oni_daimyo", "tengu_stormlord", "kitsune_ninetails", "siege_queen", "scorpion_emperor", "naga_raja", "rakshasa_maharaja", "dullahan_lord", "baba_yaga", "wyvern_matriarch", "jotunn_jarl", "hydra_broodmother", "fenrir_alpha", "voidstalker", "leviathan"];
+ const BOSS_KINDS = ["boss", "goblin_king", "skeleton_warlord", "kobold_king", "bandit_warlord", "gnoll_alpha", "cultist_hierophant", "drowned_captain", "slime_sovereign", "kappa_king", "orc_warchief", "troll_king", "harpy_matriarch", "rusalka_queen", "wraith_sovereign", "tarantula_broodmother", "joker", "fenrir_alpha", "minotaur_warlord", "draugr_king", "cursed_pharaoh", "medusa_queen", "oni_daimyo", "tengu_stormlord", "kitsune_ninetails", "siege_queen", "scorpion_emperor", "naga_raja", "rakshasa_maharaja", "dullahan_lord", "baba_yaga", "wyvern_matriarch", "jotunn_jarl", "hydra_broodmother", "voidstalker", "leviathan"];
   // v16 hell warlords: deep-hell dungeon bosses + the fallen god himself.
   const HELL_BOSS_KINDS = ["infernal_overlord", "succubus_matriarch", "doom_tyrant", "hell_magus", "peter_the_fallen"];
   const HEAVEN_BOSS_KINDS = [];
@@ -847,22 +950,22 @@ window.CFG = (() => {
   // Deep-floor ancients (eff >= 8) rise from this short list when the theme
   // has no deeper horror of its own — bossKindFor() prefers theme-matched
   // deep bosses first, then falls back here.
-  const ANCIENT_KINDS = ["hydra_broodmother", "fenrir_alpha", "wyvern_matriarch", "jotunn_jarl", "voidstalker", "leviathan", "dullahan_lord", "baba_yaga"];
-  // Minimum effective depth (delve remoteness + floors down - 1) before a
-  // warlord may wake. Starter crypts (eff 1-2) only ever see tier 1; the
-  // OP horrors (voidstalker, leviathan, hydra, fenrir, jotunn, wyvern) all
-  // need eff 6+, so floor 2 of a shallow delve can never roll them — and
-  // because boss levels scale with eff, gating depth also gates levels.
+  const ANCIENT_KINDS = ["hydra_broodmother", "wyvern_matriarch", "jotunn_jarl", "voidstalker", "leviathan", "dullahan_lord", "baba_yaga"];
+ // Minimum effective depth (delve remoteness + floors down - 1) before a
+ // warlord may wake. Starter crypts (eff 1-2) only ever see tier 1; the
+  // OP horrors (voidstalker, leviathan, hydra, jotunn, wyvern) all
+ // need eff 6+, so floor 2 of a shallow delve can never roll them — and
+ // because boss levels scale with eff, gating depth also gates levels.
   const BOSS_MIN_EFF = {
     boss: 1, goblin_king: 1, skeleton_warlord: 1, kobold_king: 1, bandit_warlord: 1, gnoll_alpha: 1, cultist_hierophant: 1, drowned_captain: 1,
     slime_sovereign: 2, kappa_king: 2, orc_warchief: 2, troll_king: 2, harpy_matriarch: 2,
-    wraith_sovereign: 3, minotaur_warlord: 3, draugr_king: 3, cursed_pharaoh: 3, medusa_queen: 3, rusalka_queen: 3,
-    tarantula_broodmother: 3,
+   wraith_sovereign: 3, minotaur_warlord: 3, draugr_king: 3, cursed_pharaoh: 3, medusa_queen: 3, rusalka_queen: 3,
+    tarantula_broodmother: 3, fenrir_alpha: 3,
     joker: 3,
-    oni_daimyo: 4, tengu_stormlord: 4, kitsune_ninetails: 4, naga_raja: 4, rakshasa_maharaja: 4,
-    siege_queen: 4, scorpion_emperor: 4,
-   dullahan_lord: 5, baba_yaga: 5,
-   wyvern_matriarch: 6, jotunn_jarl: 6, hydra_broodmother: 6, fenrir_alpha: 6, voidstalker: 6, leviathan: 6,
+   oni_daimyo: 4, tengu_stormlord: 4, kitsune_ninetails: 4, naga_raja: 4, rakshasa_maharaja: 4,
+   siege_queen: 4, scorpion_emperor: 4,
+  dullahan_lord: 5, baba_yaga: 5,
+   wyvern_matriarch: 6, jotunn_jarl: 6, hydra_broodmother: 6, voidstalker: 6, leviathan: 6,
    // v16 hell warlords: hell delves run deep (eff 10+), Peter waits past 20.
     // v19 Peter the Fallen waits at eff 12 — the god-delve's level 5 only.
     infernal_overlord: 8, succubus_matriarch: 8, doom_tyrant: 9, hell_magus: 9,
@@ -908,7 +1011,7 @@ window.CFG = (() => {
     wyvern_matriarch: ["storm", "ember", "inferno", "hive"],
     jotunn_jarl: ["glacier"],
     hydra_broodmother: ["flooded", "fungal", "flesh", "wreck", "leviathan"],
-    fenrir_alpha: ["glacier", "storm", "cavern", "grove", "briar"],
+    fenrir_alpha: ["glacier", "fungal", "cavern", "crypt", "briar"],
    voidstalker: ["abyss", "shadow", "crypt", "mirror", "library"],
    leviathan: ["leviathan"],
     // v16 hell warlords haunt the deep-hell themes (inferno/abyss/flesh) —
@@ -1188,10 +1291,10 @@ window.CFG = (() => {
   return {
     TILE, CHUNK, T, SOLID, TREE_TILES, HOTBAR_SIZE, STATS, PERKS, SKILL_TREES, STATUS_TREES, SPELL_TREE_NODES,
     SPELL_TREE_DROP, spellTreeNodes,
-    TPASSIVE_NODES, TPASSIVE_OPENING, TECH_WEAPON_FAM, SPELL_PARENTS, TREE_EARN,
+    TPASSIVE_NODES, TPASSIVE_OPENING, TECH_WEAPON_FAM, SPELL_PARENTS, TECH_SPELL_INHERIT, TECH_SHALLOW_INHERIT, TREE_EARN,
     STAT_POINTS_PER_LEVEL, SKILL_POINTS_PER_LEVEL,
     ABILITIES, TECHNIQUES, STATUS, HEALER_ROLES, ROLE_KIT, MOB_TEMPLATES, BOSS_KINDS, HELL_BOSS_KINDS, HEAVEN_BOSS_KINDS, ANCIENT_KINDS, BOSS_MIN_EFF, BOSS_THEMES, BOSS_WARD, BOSS_BULWARK, BOSS_TIER_BULK, BOSS_HP_TRIM, APEX_BULK, APEX_AURA, APEX_SIGNATURE,
-    SPELL_TIER, TECH_TIER, BOSS_MAGIC_TIER, MOB_ARSENAL, MIMIC_KINDS, DOPPELGANGER, BIOME,
+    SPELL_TIER, TECH_TIER, BOSS_MAGIC_TIER, MOB_ARSENAL, MOB_SPELL_GATE, NPC_SPELL_GATE, ANGEL_ROLES, CIV_DEMON_ROLES, MIMIC_KINDS, DOPPELGANGER, BIOME,
    SPAWN_TYPES, SPAWN_NAMES, TAME, TAMING, DIVE, STABLE_ECON, INN_ECON, HORSE_KINDS, STABLE_HORSES, STABLE_HEAVEN, STABLE_HELL,
     BREED_ECON, BREED_FAMILIES, BREED_FAMILY_LABEL, FEMALE_KINDS, MALE_KINDS, GENDERLESS_KINDS, MOB_VAR,
     SAVE_VERSION: 26,

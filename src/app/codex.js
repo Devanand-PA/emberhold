@@ -1,4 +1,4 @@
-/* Codex — reference for bosses, mobs, spells, Deep Arts, weapons, armor,
+/* Codex — reference for bosses, mobs, spells, weapon arts, weapons, armor,
  * playable races and NPC classes. window.Codex.
  *
  * Fully data-driven: every list is rebuilt from the LIVE data (window.CFG,
@@ -420,6 +420,23 @@ window.Codex = (() => {
     const v = liveMp(id);
     return v + " MP \u2014 paid only by allies without a stamina pool";
   }
+  function shallowBase(id) {
+    try {
+      const ab = (window.CFG.ABILITIES || {})[id];
+      if (!ab || ab.kind !== "shallow") return null;
+      const E = window.Entities || {};
+      const caster = codexCaster() || { kind: "player" };
+      let mp = ab.mp | 0, st = ab.st | 0;
+      if (E.effectiveShallowMpCost) { const v = E.effectiveShallowMpCost(caster, id); if (v != null && isFinite(v)) mp = v; }
+      if (E.effectiveShallowStamCost) { const v = E.effectiveShallowStamCost(caster, id); if (v != null && isFinite(v)) st = v; }
+      return { mp, st, baseMp: ab.mp | 0, baseSt: ab.st | 0 };
+    } catch (e) { return null; }
+  }
+  function shallowCostStr(id) {
+    const b = shallowBase(id);
+    if (!b) return "free";
+    return b.mp + " MP + " + b.st + " \u26a1 stamina (base " + b.baseMp + " MP + " + b.baseSt + " stamina; Efficiency/wand discounts apply)";
+  }
  function statusText(st) {
     if (!st) return "";
     const bits = [st.type];
@@ -445,13 +462,23 @@ window.Codex = (() => {
   }
   function spellList() {
     const A = window.CFG.ABILITIES || {};
-    return Object.keys(A).filter(k => A[k] && A[k].kind !== "technique" && A[k].kind !== "melee")
+    return Object.keys(A).filter(k => A[k] && A[k].kind !== "technique" && A[k].kind !== "shallow" && A[k].kind !== "melee")
       .map(k => ({ id: k, a: A[k] })).sort((a, b) => String(a.a.name).localeCompare(String(b.a.name)));
   }
   function techList() {
     const A = window.CFG.ABILITIES || {}, T = window.CFG.TECHNIQUES || {};
     return Object.keys(A).filter(k => A[k] && A[k].kind === "technique")
       .map(k => ({ id: k, a: A[k], t: T[k] || {} })).sort((a, b) => String(a.a.name).localeCompare(String(b.a.name)));
+  }
+  function shallowList() {
+    const A = window.CFG.ABILITIES || {}, T = window.CFG.TECHNIQUES || {};
+    return Object.keys(A).filter(k => A[k] && A[k].kind === "shallow")
+      .map(k => ({ id: k, a: A[k], t: T[k] || {} })).sort((a, b) => String(a.a.name).localeCompare(String(b.a.name)));
+  }
+  // Deep + shallow arts grouped as one Weapon Arts category (deeps first,
+  // each alpha by name). Entries carry their kind in e.a.kind.
+  function weaponArtList() {
+    return techList().concat(shallowList());
   }
   function weaponList() {
     const I = (window.Items && window.Items.ITEMS) || {};
@@ -536,7 +563,7 @@ window.Codex = (() => {
       let rule = "";
       if (mp.isBoss) {
         const tn = ARSENAL_TIER_NAME[mp.maxTier] || ("T" + mp.maxTier);
-        rule = "Boss arsenal T" + mp.maxTier + " (" + tn + "): spawns with up to 12 of these — always at least 3 top-tier spells (shortfall cascades a tier down) plus at least 2 Deep Arts (a thin Deep Art pool substitutes another high-tier spell). Signatures + heal/panacea always stay.";
+        rule = "Boss arsenal T" + mp.maxTier + " (" + tn + "): spawns with up to 14 of these — always at least 3 top-tier spells (shortfall cascades a tier down) plus at least 2 Deep Arts (a thin Deep Art pool substitutes another high-tier spell) plus at least 2 shallow arts. Signatures + heal/panacea always stay (Peter fields the entire pool).";
       } else {
         try {
           const T = ((window.CFG && window.CFG.MOB_TEMPLATES) || {})[kind] || {};
@@ -544,8 +571,11 @@ window.Codex = (() => {
           const APEX = PA.APEX_XP != null ? PA.APEX_XP : 150;
           const POWER = PA.POWER_XP != null ? PA.POWER_XP : 100;
           const xp = T.xp | 0 || 0;
-          if (xp >= APEX) rule = "Apex horror: spawns with a thematic cataclysm + a deep art inside its 7-move kit.";
-          else if (xp >= POWER) rule = "Seasoned killer: spawns with war-magic (tornado) + an art inside its 7-move kit.";
+          let martial = false;
+          try { martial = window.Entities && window.Entities.isSpellcasterKind && !window.Entities.isSpellcasterKind(kind); } catch (eM) { martial = false; }
+          if (martial) rule = "Martial kit: spins/bites/buffs + a weapon-matched shallow art (lv 10+) + a deep art by power band (xp 100+, inside its 7-move kit). Never casts attack magic.";
+          else if (xp >= APEX) rule = "Apex horror: spawns with a thematic cataclysm (lv 40+ only) + a deep art inside its 7-move kit.";
+          else if (xp >= POWER) rule = "Seasoned killer: spawns with war-magic (tornado, lv 15+) + an art inside its 7-move kit.";
           else rule = "Spawns with its signatures + 1-2 body-pool bonuses (up to 7 moves).";
         } catch (e2) { }
       }
@@ -861,7 +891,7 @@ window.Codex = (() => {
     cumulus_manta: "Rides the high cloud like slow water. Glaciers fall off it like dandruff.",
     dawn_pilgrim: "Walks every island, blessing each. Hopes you walk with it.",
     lumen_cub: "A sunbeam that grew paws. Plays rough only when you start it.",
-    dawn_angel: "A civilized angel of the dawn court — trades, chats, and can be recruited. High-level, courteous, and well-armed.",
+    dawn_angel: "A civilized angel of the dawn court — trades, chats, and can be recruited. High-level, courteous, well-armed (level-fit steel, war spells at 40+), and every angel fields at least one cataclysm or deep art. Teach them any tome — chat Trade pane or party panel.",
     pegasus: "Dawn-bred wings, sold only in heaven's stables. The fastest saddle in the sky.",
     unicorn: "Moonhorn lines, sold only in heaven's stables. The pride of the dawn court.",
     choir_angel: "Keeps the choir books and the town gossip in equal measure.",
@@ -1135,12 +1165,12 @@ window.Codex = (() => {
         {
         let costEx = "";
         try {
-          costEx = "e.g. Fireball " + spellCostStr("fireball") + "; Cinder Edge " + techCostStr("cinder_edge") + " (" + techFallbackStr("cinder_edge") + ")";
+          costEx = "e.g. Fireball " + spellCostStr("fireball") + "; Cinder Edge " + techCostStr("cinder_edge") + " (" + techFallbackStr("cinder_edge") + "); Flowing Strikes " + shallowCostStr("flowing_strikes");
         } catch (e2) { costEx = ""; }
-        return big + head("Spells + Deep Arts pipeline") +
+        return big + head("Spells + Weapon Arts pipeline") +
           "<div class='cdxsub'>MATK vs ATK · DEF vs SDEF · elemental table</div>" +
-          code("COSTS (paid on cast; fizzled casts refund it):\n  spell MP = round(base x (1 - 0.1 x efficiency) x wand)\n  art stamina = round(base x (1 - 0.1 x efficiency) x wand x 1.5)\n  (stamina-less allies pay the art's discounted base as MP)\n  " + costEx + "\n  cooldown = base x (1 - 0.08 x surge) x mastery 0.8\n  (Quicken shortens while a wand is wielded)\n\nDAMAGE:\nbase = MATK for pure spells,\n       ATK for strike/whirlwind/bowshot + ALL Deep Arts\nbase fallback: atk if matk missing; atkUp buff x1.3\npower = ability.power (Smite x2.5 vs unholy)\nraw = base x power x spellPowerMult\nspellPowerMult = (1 + 0.15*potency + 0.08*surge)\n  x (STRmult if physical/art else INTmult; hero only,\n     +1%/pt over 5) x wand/staff trees x staffPower\n  x ringMult(element) x holy vestments 1.25 / archmage 1.1\nmit = tdef*0.55, tdef = DEF if physical/art else SDEF\n   (mobs without sdef fall back to DEF; old saves too)\ndmg = round((raw - mit) * variance[0.9-1.1]), min 1\nthen combatDmg adds: techniqueStrikeMult for Deep Arts,\n  Charm aura (party/tames +5 MATK per CHA via combatMatk)\n  + Usaghito Charm voice (hero/allies/party/tames/self +1 per singer CHA), clones x50%\nthen dealDamage (element table for el != physical,\n  boss weak +10%, mimic %, parry, mercy…)") +
-          li(["<b>Spell MP costs are final:</b> round(base x (1 − 0.1 x Efficiency) x wand) — Efficiency −10%/rank and wand discounts apply to the listed base. Every spell entry shows its live cost (base + your discounts).", "<b>Deep Arts cost 1.5x stamina:</b> round(base x (1 − 0.1 x Efficiency) x wand x <b>1.5</b>) — paid in ⚡, not MP. Every Deep Art entry shows its live stamina cost (base x1.5 + your discounts); the hotbar, 🎒 Inventory and skill trees show the same live number.", "<b>Stamina-less allies</b> (NPCs/allies with no stamina pool) pay the art's discounted base as MP instead — Deep Arts keep working in monster and ally hands.", "Deep Arts ride <b>ATK/DEF</b> even when they look magical (holy_sword, cinder_edge, avalanche hammer…). Only pure spells ride MATK/SDEF.", "Element table (fire/water/ice/electric/holy/nature) multiplies in dealDamage for el != physical — physical spells skip it (their triangle already ran for strike/whirlwind; bows/thrown keep element from arrow/bomb).", "Rings match the spell element (1.5x); staves: only the FIRST staff in hotbar order counts; wands cut mana the same way.", "Borrowed arts hit soft in monster hands: wild-mob Deep Arts land at 30% (techArtMult) — party members and tames deal full power. Bosses cast bare-handed (exempt from the wield check) but draw band war-gear like everyone: low warlords steel, mid+ warlords dragonbone, plus plate (robes for casters) — basic strikes ride the steel, and mob bows fire infinite arrows."]) +
+          code("COSTS (paid on cast; fizzled casts refund it):\n  spell MP = round(base x (1 - 0.1 x efficiency) x wand)\n  art stamina = round(base x (1 - 0.1 x efficiency) x wand x 1.5)\n  shallow = a little MP + a little stamina (Efficiency/wand discounts apply)\n  (stamina-less allies pay a shallow art's MP + stamina both as MP)\n  " + costEx + "\n  cooldown = base x (1 - 0.08 x surge) x mastery 0.8\n  (Quicken shortens while a wand is wielded)\n\nDAMAGE:\nbase = MATK for pure spells,\n       ATK for strike/whirlwind/bowshot + ALL Deep Arts + ALL Shallow Arts\nbase fallback: atk if matk missing; atkUp buff x1.3\npower = ability.power (Smite x2.5 vs unholy)\nraw = base x power x spellPowerMult\nspellPowerMult = (1 + 0.15*potency + 0.08*surge)\n  x (STRmult if physical/art else INTmult; hero only,\n     +1%/pt over 5) x wand/staff trees x staffPower\n  x ringMult(element) x holy vestments 1.25 / archmage 1.1\nmit = tdef*0.55, tdef = DEF if physical/art else SDEF\n   (mobs without sdef fall back to DEF; old saves too)\ndmg = round((raw - mit) * variance[0.9-1.1]), min 1\nthen combatDmg adds: techniqueStrikeMult for Deep Arts,\n  Charm aura (party/tames +5 MATK per CHA via combatMatk)\n  + Usaghito Charm voice (hero/allies/party/tames/self +1 per singer CHA), clones x50%\nthen dealDamage (element table for el != physical,\n  boss weak +10%, mimic %, parry, mercy…)") +
+          li(["<b>Spell MP costs are final:</b> round(base x (1 − 0.1 x Efficiency) x wand) — Efficiency −10%/rank and wand discounts apply to the listed base. Every spell entry shows its live cost (base + your discounts).", "<b>Deep Arts cost 1.5x stamina:</b> round(base x (1 − 0.1 x Efficiency) x wand x <b>1.5</b>) — paid in ⚡, not MP. Every Deep Art entry shows its live stamina cost (base x1.5 + your discounts); the hotbar, 🎒 Inventory and skill trees show the same live number.", "<b>Shallow Arts cost a little of both:</b> listed MP + listed stamina per cast (Efficiency −10%/rank and wand discounts apply to the listed bases) — Flowing Strikes shows its live dual cost next to every entry.", "<b>Stamina-less allies</b> (NPCs/allies with no stamina pool) pay the art's discounted base as MP instead — Deep Arts keep working in monster and ally hands; shallow arts charge their MP + stamina both as MP.", "Deep Arts ride <b>ATK/DEF</b> even when they look magical (holy_sword, cinder_edge, avalanche hammer…). Only pure spells ride MATK/SDEF.", "Element table (fire/water/ice/electric/holy/nature) multiplies in dealDamage for el != physical — physical spells skip it (their triangle already ran for strike/whirlwind; bows/thrown keep element from arrow/bomb).", "Rings match the spell element (1.5x); staves: only the FIRST staff in hotbar order counts; wands cut mana the same way.", "Borrowed arts hit soft in monster hands: wild-mob Deep Arts land at 30% (techArtMult) — party members and tames deal full power. Bosses cast bare-handed (exempt from the wield check) but draw band war-gear like everyone: low warlords steel, mid+ warlords dragonbone, plus plate (robes for casters) — basic strikes ride the steel, and mob bows fire infinite arrows."]) +
           note("Fizzled Deep Arts refund the stamina. Eject is free (no MP, no stamina). Cooldowns x (1 − 0.08 x Surge), Mastery x0.8.");
         }
       case "g_bow":
@@ -1157,7 +1187,7 @@ window.Codex = (() => {
       case "g_boss":
         return big + head("Bosses: ward, frail, weak, enrage") +
           "<div class='cdxsub'>scaled bulk + capped single hits + tricks</div>" +
-          li(["<b>Bulk by unlock tier (v251 experiment):</b> HP x12.5 (t1) / x16 (t2) / x40–48 (mid t3–4) / x55–60 (high t5–6) / x20–22 (hell t8–11) / x50 (Peter + goddess t12) over template HP (hell + heaven boss templates halved); DEF x2.5 low / x3.0 mid-high-hell / x3.4 Peter-goddess; ATK/MATK x(1+0.08t), MP x(1+0.15t), t = tier − 1; XP x(1+0.25t). SDEF = DEF x0.85 (spell-frail) or x1.15 (blade-frail). Weak element +10%. <b>Growth is tiered too:</b> low tiers barely compound with level, mid climbs, high climbs harder, hell harder still, Peter/goddess steepest — same level, higher tier pulls away.", "<b>Arsenal (tiered by depth):</b> hedge T1 (eff1) → +battle T2 (eff2-3) → +war T3 (eff4) → +cataclysm T4 (eff5-6). The movepool is uncapped; each spawn draws up to 12 with at least 3 of its highest-tier spells (shortfall cascades a tier down) plus at least 2 Deep Arts (a thin Deep Art pool substitutes another high-tier spell). Signatures + heal/panacea always stay (Peter keeps no self-heal); the lying gate tiers by spawn level. Bosses need no weapon for Deep Arts.", "<b>Enrage below 35% HP:</b> +35% ATK/MATK, faster tricks (bossT/T2 shortened; voidstalker stalk 1s; leviathan tent 3s/bolt 2s).", "<b>Tricks:</b> every warlord has one — see its Codex entry (🎲 Trick line): adds, novas, blinks, charges, gazes, storms, songs. Insect royals (broodmother/queen/emperor) run spells + enrage with no unique trick."]) +
+          li(["<b>Bulk by unlock tier (v251 experiment):</b> HP x12.5 (t1) / x16 (t2) / x40–48 (mid t3–4) / x55–60 (high t5–6) / x20–22 (hell t8–11) / x50 (Peter + goddess t12) over template HP (hell + heaven boss templates halved); DEF x2.5 low / x3.0 mid-high-hell / x3.4 Peter-goddess; ATK/MATK x(1+0.08t), MP x(1+0.15t), t = tier − 1; XP x(1+0.25t). SDEF = DEF x0.85 (spell-frail) or x1.15 (blade-frail). Weak element +10%. <b>Growth is tiered too:</b> low tiers barely compound with level, mid climbs, high climbs harder, hell harder still, Peter/goddess steepest — same level, higher tier pulls away.", "<b>Arsenal (tiered by depth):</b> hedge T1 (eff1) → +battle T2 (eff2-3) → +war T3 (eff4) → +cataclysm T4 (eff5-6). The movepool is uncapped; each spawn draws up to 14 with at least 3 of its highest-tier spells (shortfall cascades a tier down) plus at least 2 Deep Arts (a thin Deep Art pool substitutes another high-tier spell) plus at least 2 shallow arts. Signatures + heal/panacea always stay (Peter fields the entire pool at once); the lying gate tiers by spawn level. Bosses need no weapon for arts.", "<b>Enrage below 35% HP:</b> +35% ATK/MATK, faster tricks (bossT/T2 shortened; voidstalker stalk 1s; leviathan tent 3s/bolt 2s).", "<b>Tricks:</b> every warlord has one — see its Codex entry (🎲 Trick line): adds, novas, blinks, charges, gazes, storms, songs. Insect royals (broodmother/queen/emperor) run spells + enrage with no unique trick."]) +
           note("Boss kind keys + unlock depths live on each boss entry (Special line). Reopen the Codex after balance edits.");
       case "g_mimic": {
         let tiers = "lesser 20%/6%/2s · classic 30%/10%/3s · greater 35%/12%/3s · devourer 40%/15%/4s · threshold 35%/12%/4s";
@@ -1184,7 +1214,7 @@ window.Codex = (() => {
       case "g_traits":
         return big + head("Mob traits primer") +
           "<div class='cdxsub'>what the flags on each entry mean</div>" +
-          li(["<b>undead</b> — silver/dawnstone 5x, Smite 2.5x power, holy table up to 1.35-1.4x, dawnstone garb wards 30%, grave hunger: 10% per landed direct hit summons another (same kind ±1 lv; bosses exempt).", "<b>demon</b> — hell fiends, hell bosses and civilized demons burn like the undead (silver/dawnstone, Smite 2.5x, holy 1.35x, dawnstone garb wards 30%) but never grave-hunger.", "<b>archer</b> — shoots arrows (its shots ride bow damage).", "<b>tamable</b> — any hero can work it (submit 0-25% HP, E within 45s). <b>Insects</b> (tarantula/scorpion/ant/hornet/swarms/beetle/gloomspinner) need Vermin Lore; <b>wild animals</b> (wolves-to-wyverns list) need Broad Kinship (needs Vermin first). Warlords NEVER submit; 👑 <b>apex ancients</b> (Peak Dragon, Frostwyrm, Mire Hydra, Tempest Roc, Prism Colossus, Umbral Wyrm) submit ONLY for a fully maxed Taming tree (every node maxed) — and even then only 1 in 20 beaten ancients ever asks. Over-level submits are refused.", "<b>power bands (non-boss)</b> — seasoned killers (template XP 100+) spawn with war-magic (tornado) + a fight art; apex horrors (XP 150+) spawn with a thematic cataclysm + a deeper art. Art-wielders spawn carrying the art's matching tiered weapon (higher spawns carry higher tiers); bosses need no weapon. Mimics are exempt (their teeth are the threat).", "<b>mount (/swim /lava)</b> — rideable; speed/swim/lava cross their liquid. <b>docile</b> — won't start fights. <b>aquatic / lava-born</b> — water/magma walkable (divers hide there).", "<b>human foes</b> (bandit/outlaw/murderer) — hostile to you, party AND villagers (guards intervene); never spawn near towns; gated by distance (60/100/140).", "<b>ANCIENT</b> — deep-floor horror (eff 8+, theme-matched first). <b>archer/tamable/mount</b> stack (e.g. kelpie: tamable mount that dives).", "<b>👑 Apex lair</b> — lv-70 ancients (Peak Dragon, Frostwyrm, Mire Hydra, Tempest Roc, Prism Colossus, Umbral Wyrm) roost only in the seven highlands; each lair's weather (hail, whiteout, miasma, stormwall, soul-glare, voidchill, cinderwind) warns ~18 tiles out with drain + shove + clouded vision. See each mob's Special line."]) +
+          li(["<b>undead</b> — silver/dawnstone 5x, Smite 2.5x power, holy table up to 1.35-1.4x, dawnstone garb wards 30%, grave hunger: 10% per landed direct hit summons another (same kind ±1 lv; bosses exempt).", "<b>demon</b> — hell fiends, hell bosses and civilized demons burn like the undead (silver/dawnstone, Smite 2.5x, holy 1.35x, dawnstone garb wards 30%) but never grave-hunger.", "<b>archer</b> — shoots arrows (its shots ride bow damage).", "<b>tamable</b> — any hero can work it (submit 0-25% HP, E within 45s). <b>Insects</b> (tarantula/scorpion/ant/hornet/swarms/beetle/gloomspinner) need Vermin Lore; <b>wild animals</b> (wolves-to-wyverns list) need Broad Kinship (needs Vermin first). Warlords NEVER submit; 👑 <b>apex ancients</b> (Peak Dragon, Frostwyrm, Mire Hydra, Tempest Roc, Prism Colossus, Umbral Wyrm) submit ONLY for a fully maxed Taming tree (every node maxed) — and even then only 1 in 20 beaten ancients ever asks. Over-level submits are refused.", "<b>power bands (non-boss)</b> — casters among seasoned killers (template XP 100+) spawn with war-magic (tornado, lv 15+) + a fight art; caster apex horrors (XP 150+) add a thematic cataclysm (lv 40+ only) + a deeper art. Martial kinds never cast attack magic — they spawn with a weapon-matched shallow art (lv 10+) + a deep art by power band instead. Spell tiers are gated by level AND kind power: under lv 15 hedge (T1) only, under lv 40 battle (T2), lv 40+ up to the kind's cap — weak kinds (XP under 40, e.g. goblins) never rise above hedge, so no cataclysms. Bosses ignore this (depth tiers them instead). Art-wielders spawn carrying the art's matching tiered weapon (higher spawns carry higher tiers); bosses need no weapon. Mimics are exempt (their teeth are the threat).", "<b>mount (/swim /lava)</b> — rideable; speed/swim/lava cross their liquid. <b>docile</b> — won't start fights. <b>aquatic / lava-born</b> — water/magma walkable (divers hide there).", "<b>human foes</b> (bandit/outlaw/murderer) — hostile to you, party AND villagers (guards intervene); never spawn near towns; gated by distance (60/100/140).", "<b>ANCIENT</b> — deep-floor horror (eff 8+, theme-matched first). <b>archer/tamable/mount</b> stack (e.g. kelpie: tamable mount that dives).", "<b>👑 Apex lair</b> — lv-70 ancients (Peak Dragon, Frostwyrm, Mire Hydra, Tempest Roc, Prism Colossus, Umbral Wyrm) roost only in the seven highlands; each lair's weather (hail, whiteout, miasma, stormwall, soul-glare, voidchill, cinderwind) warns ~18 tiles out with drain + shove + clouded vision. See each mob's Special line."]) +
           note("Levels: overworld caps at 50 (apex ancients sit at 70 with mid-tier-boss bodies); delves scale with effective depth (tier + floors). Surface defenders cap at lv35 in holdings (warlords lv30-35); hell holdings muster lv60-80 with lv74-80 warlords. The seven highlands run ~40-46: mountain, volcano, frostcrown, blightmire, stormcrag, crystal scar, umbral waste.");
       case "g_world": {
         let rows = null;
@@ -1204,7 +1234,7 @@ window.Codex = (() => {
           "<div class='cdxsub'>seven high-level wilds, one ancient each</div>" +
           li(["<b>Seven highlands</b> (overworld curve ~40-46, cap 50 — everything past 50 lives in delves or lairs): mountain (d>210) · volcano (d>260) · frostcrown (d>270) · blightmire (d>285) · stormcrag (d>300) · crystal scar (d>320) · umbral waste (d>340). Blobs are wide on purpose — these read as regions, not speckles.", "<b>One ancient each, lv70</b> (65% of that highland's rare rolls; nothing else overworld passes 50): Peak Dragon (mountain + volcano) · Frostwyrm · Mire Hydra · Tempest Roc · Prism Colossus · Umbral Wyrm. Mid-tier-boss bodies via per-instance bulk.", "<b>Lair weather warns ~18 tiles out</b>: slow max-HP drain (status tick — walls/wards never blunt it) + an outward shove that strengthens inside + a vision-clouding haze. The toast on entry is the choice: turn back or press on.", "<b>Old ground is redrawn</b>: pre-v14 saves keep the hero and wipe the terrain (chunks + delves), so the new highlands bake in clean."]) +
           (rows && rows.length ? li(rows) : "") +
-          note("Frostwood and yggdrasil never chop \u2014 delve floor 5+ / 11+ finds only. Frostcrown pines chop like tundra pines. Mire hydras dive their bog pools. All six ancients (even the Peak Dragon) CAN submit — but only for a hero with a FULLY maxed 🐾 Taming tree, and only 1 in 20 beaten ancients ever asks.");
+          note("Frostwood and yggdrasil never chop \u2014 delve floor 4+ / 11+ finds only. Frostcrown pines chop like tundra pines. Mire hydras dive their bog pools. All six ancients (even the Peak Dragon) CAN submit — but only for a hero with a FULLY maxed 🐾 Taming tree, and only 1 in 20 beaten ancients ever asks.");
       }
       case "g_hero": {
         let rows = [];
@@ -1225,8 +1255,8 @@ window.Codex = (() => {
         return big + head("Hero stats + regen") +
           "<div class='cdxsub'>attributes drive the body · levels grant points, never stats</div>" +
           (rows.length ? li(rows) : "") +
-          code("regen (5/s base, stat bonuses stack on top):\n  stamina/s = 5 + ENDrate x max(0, END-5)\n  HP/s      = 5 + FORrate x max(0, FOR-5)\n  MP/s      = 5 + INTrate x max(0, INT-5)\n" + rates + "\nsprinting drains 12 stamina/s; regen resumes 0.6s after effort") +
-          li(["<b>Derived body (flat, no level term):</b> maxHP 40 + 10 per FOR over 5; maxMP 20 + 10 per INT over 5; ATK 8 + 10 per STR over 5; MATK 8 + 10 per INT over 5; DEF 3 + 10 per END over 5; SDEF 3 + 10 per FOR over 5; SPD 3.4 + 0.05 per AGI over 5; max stamina 100 + 10 per END over 5 — plus gear on top.", "<b>Every hero regens 5/s of each</b> — a fresh hero recovers stamina, HP and MP without spending a point; Endurance, Fortitude and Intellect push each trickle higher.", "<b>Levels grant points, not stats:</b> each level-up pays stat points to spend in the Character panel (C) — the points do the work, never the level number."]) +
+          code("regen (5/s base, stat bonuses stack on top):\n  stamina/s = 5 + ENDrate x max(0, END-5)\n  HP/s      = 5 + FORrate x max(0, FOR-5)\n  MP/s      = 5 + INTrate x max(0, INT-5)\n" + rates + "\nsprinting drains 6 stamina/s; regen resumes 0.6s after effort") +
+          li(["<b>Derived body (flat, no level term):</b> maxHP 40 + 10 per FOR over 5; maxMP 20 + 10 per INT over 5; ATK 8 + 10 per STR over 5; MATK 8 + 10 per INT over 5; DEF 3 + 10 per END over 5; SDEF 3 + 10 per FOR over 5; SPD 3.4 + 0.05 per AGI over 5; max stamina 100 + 10 per END over 5 — plus gear on top.", "<b>Every hero regens 5/s of each</b> — a fresh hero recovers stamina, HP and MP without spending a point; Endurance, Fortitude and Intellect push each trickle higher; a worn habitus quickens MP and a worn kasaya quickens stamina on top.", "<b>Levels grant points, not stats:</b> each level-up pays stat points to spend in the Character panel (C) — the points do the work, never the level number."]) +
           note("Sleeping, eating and healer NPCs heal directly — none of it runs through regen.");
       }
       case "g_xp": {
@@ -1248,7 +1278,7 @@ window.Codex = (() => {
       case "g_heaven": {
         return big + head("Heaven dimension") +
           "<div class='cdxsub'>sphere · hearths · serenes · pantheon · mock battle</div>" +
-          li(["<b>Heavenly Sphere:</b> the goddess presses it into your hand when she carries you home after Peter falls. From then on every SURFACE hearth offers <b>Step into heaven</b> — same coordinates, dawn side (the sphere itself is the key: no sphere in hand, no ascent — the way back down is always open); every heaven hearth offers the way back. A fallen overworld boss sometimes looses a spare sphere — 🎁 Give / ⚖️ Trade it to a hero who missed Peter's fall.", "<b>Ground:</b> walkable cloud everywhere, lakes/reservoirs as water, grass+tree islands (meadows/groves), hearths with angels + heavendwellers. No dungeons. Practice worlds ride free (Surface/Hell/Heaven buttons).", "<b>Serenes (mobs + overworld bosses):</b> 12 wild celestials + Divine Dragon, Celestial Messenger, Reservoir Leviathan, Seraph Regent — all passive unless struck repeatedly. The four overworld bosses are the <b>ONLY dawnstone source</b>: every kill pays 2-3 dawnstone shards plus a dawnstone prize (sometimes the Daybreak legend). The first two hits earn a warning flash; the third turns them. While calm they drift like grazers and mend you (status first, then low HP, per-mob cooldown). Garrison-mates never fight each other.", "<b>Angels:</b> high-level civilized NPCs (dawn/choir/seraph/scroll kinds) in angel villages/towns/cities with their own builds — trade/chat/recruit like any townsfolk, tougher bodies than surf folk.", "<b>Pantheon (0,0):</b> the goddess of dawn resides at the center. Talk, or ask a mock battle: the pantheon seals with impenetrable walls, angels gather to watch, she fights at Peter-tier stats with sword + Holy Sword technique, blessed weapon and kin at half base cooldown, immune to status/stun. Your defeat revives you on the spot; her defeat revives her; the walls fall and she sighs. After the first mock battle (win or lose) she offers quests: move a divine dragon from a building, carry holy water to surface cathedrals, help heavendwellers reincarnate to the surface, and more."]) +
+          li(["<b>Heavenly Sphere:</b> the goddess presses it into your hand when she carries you home after Peter falls. From then on every SURFACE hearth offers <b>Step into heaven</b> — same coordinates, dawn side (the sphere itself is the key: no sphere in hand, no ascent — the way back down is always open); every heaven hearth offers the way back. A fallen overworld boss sometimes looses a spare sphere — 🎁 Give / ⚖️ Trade it to a hero who missed Peter's fall.", "<b>Ground:</b> walkable cloud everywhere, lakes/reservoirs as water, grass+tree islands (meadows/groves), hearths with angels + heavendwellers. No dungeons. Practice worlds ride free (Surface/Hell/Heaven buttons).", "<b>Serenes (mobs + overworld bosses):</b> 12 wild celestials + Divine Dragon, Celestial Messenger, Reservoir Leviathan, Seraph Regent — all passive unless struck repeatedly. The four overworld bosses are the <b>ONLY dawnstone source</b>: every kill pays 2-3 dawnstone shards plus a dawnstone prize (sometimes the Daybreak legend). The first two hits earn a warning flash; the third turns them. While calm they drift like grazers and mend you (status first, then low HP, per-mob cooldown). Garrison-mates never fight each other.", "<b>Angels:</b> high-level civilized NPCs (dawn/choir/seraph/scroll kinds, role floors 40-55, celestial stat frame) in angel villages/towns/cities with their own builds — trade/chat/recruit like any townsfolk, tougher bodies than surf folk, level-fit steel + attire, war spells at 40+, and EVERY angel fields ≥1 cataclysm (casters: Burning Light) or deep art (guards: Holy Sword). Teach any angel any tome.", "<b>Pantheon (0,0):</b> the goddess of dawn resides at the center. Talk, or ask a mock battle: the pantheon seals with impenetrable walls, angels gather to watch, she fights at Peter-tier stats with sword + Holy Sword technique, blessed weapon and kin at half base cooldown, immune to status/stun. Your defeat revives you on the spot; her defeat revives her; the walls fall and she sighs. After the first mock battle (win or lose) she offers quests: move a divine dragon from a building, carry holy water to surface cathedrals, help heavendwellers reincarnate to the surface, and more."]) +
           note("Heaven is chill by design — the opposite road from hell. Bring the sphere; mind the dragons (gently).");
       }
       case "g_hell": {
@@ -1266,7 +1296,7 @@ window.Codex = (() => {
     { id: "mob", label: "🐾 Mobs", list: mobList },
     { id: "divine", label: "🌅 Divine", list: divineList },
     { id: "spell", label: "🔮 Spells", list: spellList },
-    { id: "tech", label: "⚔️ Deep Arts", list: techList },
+    { id: "tech", label: "⚔️ Weapon Arts", list: weaponArtList },
     { id: "weapon", label: "🗡️ Weapons", list: weaponList },
     { id: "armor", label: "🛡️ Armor", list: armorList },
     { id: "mat", label: "🧪 Materials", list: matList },
@@ -1284,7 +1314,7 @@ window.Codex = (() => {
     const parts = [];
     for (const k of Object.keys(b)) {
       const v = b[k];
-      const lab = k.replace(/^maxHp$/, "HP").replace(/^maxMp$/, "MP").replace(/^atk$/, "ATK").replace(/^matk$/, "MATK").replace(/^def$/, "DEF").replace(/^sdef$/, "SDEF").replace(/^spd$/, "SPD");
+      const lab = k.replace(/^maxHp$/, "HP").replace(/^maxMp$/, "MP").replace(/^maxStamina$/, "ST").replace(/^mpRegen$/, "MP/s").replace(/^stRegen$/, "ST/s").replace(/^atk$/, "ATK").replace(/^matk$/, "MATK").replace(/^def$/, "DEF").replace(/^sdef$/, "SDEF").replace(/^spd$/, "SPD");
       parts.push((v >= 0 ? "+" : "") + v + " " + lab);
     }
     return parts.join(", ");
@@ -1357,10 +1387,10 @@ window.Codex = (() => {
       const n = Math.max(0, (lv | 0) - 1);
       let hp = mobScaled(T.hp, g.hp, lf, g.hpCap);
       let mp = mobScaled(T.mp, g.mp, lf, g.mpCap != null ? g.mpCap : g.hpCap);
-      let atk = mobScaled(T.atk, g.atk, lf, g.atkCap);
-      let matk = mobScaled(T.atk, g.matk, lf, g.matkCap != null ? g.matkCap : g.atkCap);
-      let def = mobScaled(T.def, g.def, lf, g.defCap != null ? g.defCap : g.atkCap);
-      let sdef = mobScaled(T.def, g.sdef, lf, g.sdefCap != null ? g.sdefCap : g.atkCap);
+     let atk = mobScaled(T.atk, g.atk, lf, g.atkCap);
+      let matk = mobScaled(T.matk != null ? T.matk : T.atk, g.matk, lf, g.matkCap != null ? g.matkCap : g.atkCap);
+     let def = mobScaled(T.def, g.def, lf, g.defCap != null ? g.defCap : g.atkCap);
+      let sdef = mobScaled(T.sdef != null ? T.sdef : T.def, g.sdef, lf, g.sdefCap != null ? g.sdefCap : g.atkCap);
       const BK = (window.CFG.BOSS_KINDS || []);
       const isBossKind = !!(T.boss || BK.indexOf(kind) >= 0);
       if (isBossKind) {
@@ -1379,8 +1409,10 @@ window.Codex = (() => {
         def = Math.round(def * defB);
         mp = Math.round(mp * (1 + tt * 0.15));
         try {
+          if (T.sdef == null) {
           const prof = ((window.CFG.BOSS_BULWARK || {})[kind]) || {};
           sdef = Math.max(0, Math.round(def * (prof.frail === "mag" ? 0.85 : 1.15)));
+          }
         } catch (e2) {}
       }
       try {
@@ -1418,7 +1450,7 @@ window.Codex = (() => {
     h += "<tr><td>SPD</td><td>" + esc(s.spd.toFixed(1) + " (" + Math.max(1, Math.round((s.spd - sJ) * 10) / 10).toFixed(1) + "-" + (Math.round((s.spd + sJ) * 10) / 10).toFixed(1) + ")") + "</td></tr>";
     h += "<tr><td>XP</td><td>" + esc(r(s.xp, fX)) + "</td></tr>";
     h += "</table>";
-    try { const T = ((window.CFG && window.CFG.MOB_TEMPLATES) || {})[kind] || {}; if (T.boss || (window.CFG.BOSS_KINDS || []).indexOf(kind) >= 0) h += "<div class='cdxnote'>SDEF runs off DEF via bulwark.</div>"; } catch (e) {}
+    try { const T = ((window.CFG && window.CFG.MOB_TEMPLATES) || {})[kind] || {}; if (T.boss || (window.CFG.BOSS_KINDS || []).indexOf(kind) >= 0) h += "<div class='cdxnote'>" + (T.sdef != null ? "SDEF is set directly on this warlord (manual control — bulwark yields)." : "SDEF runs off DEF via bulwark.") + "</div>"; } catch (e) {}
     h += "<div class='cdxnote'>Base roll: HP/MP/ATK +-8-10% (warlords +-3%), DEF/SDEF +-1 (warlords exact), SPD +-0.2, XP +-10%. MP assumes the costliest bonus-spell kit; cheaper kits roll lower. Tames inherit the roll.</div>";
     return h;
   }
@@ -1530,7 +1562,21 @@ const maxLv = mobMaxLv(e.id);
   function techDetail(e) {
     const a = e.a, t = e.t;
     let fam = "";
-    try { fam = (window.CFG.TECH_WEAPON_FAM || {})[e.id] || ""; } catch (err) { }
+    try {
+      if (window.Entities.techWeaponFams) fam = (window.Entities.techWeaponFams(e.id) || []).join(" / ");
+      else fam = (window.CFG.TECH_WEAPON_FAM || {})[e.id] || "";
+      if (Array.isArray(fam)) fam = fam.join(" / ");
+    } catch (err) { }
+    let links = "";
+    try {
+      const SI = (window.CFG && window.CFG.TECH_SPELL_INHERIT && window.CFG.TECH_SPELL_INHERIT[e.id]) || [];
+      const HI = (window.CFG && window.CFG.TECH_SHALLOW_INHERIT && window.CFG.TECH_SHALLOW_INHERIT[e.id]) || [];
+      const nm = (id) => { try { const x = window.CFG.ABILITIES[id]; return (x && x.name) || id; } catch (err2) { return id; } };
+      const bits = [];
+      if (SI.length) bits.push("spells: " + SI.map(nm).join(" + "));
+      if (HI.length) bits.push("shallow: " + HI.map(nm).join(" + "));
+      if (bits.length) links = "Gains every unlocked rank of " + bits.join("; ") + " (one-way).";
+    } catch (err) { }
     let req = "";
     try {
       const r = t.req || {};
@@ -1544,11 +1590,40 @@ const maxLv = mobMaxLv(e.id);
     try { if (window.UI && window.UI.masteryDesc) mastery = window.UI.masteryDesc(e.id) || ""; } catch (err) { }
     return fig('<div class="cdxbig">' + cdxIcon("ability", e.id, 40) + "</div>") + "<h4>" + esc(a.name || t.name || e.id) + "</h4>" +
       '<div class="cdxsub">' + esc([(t.active === false ? "passive" : "active"), (a.element || "")].filter(Boolean).join(" · ")) + "</div>" +
-      kv([["Stamina cost", t.active === false ? "— (passive, no cast)" : techCostStr(e.id)], ["Mana fallback", t.active === false ? "—" : techFallbackStr(e.id)], ["Cooldown", a.cd + "s"], ["Weapon", fam || (t.active === false ? "varies" : "—")], ["Unlock", req], ["Hint", t.hint]]) +
+      kv([["Stamina cost", t.active === false ? "— (passive, no cast)" : techCostStr(e.id)], ["Mana fallback", t.active === false ? "—" : techFallbackStr(e.id)], ["Cooldown", a.cd + "s"], ["Weapon", fam || (t.active === false ? "varies" : "—")], ["Inherits", links || "—"], ["Unlock", req], ["Hint", t.hint]]) +
       '<div class="cdxdesc">' + esc(a.desc || "") + "</div>" +
       (mastery ? '<div class="cdxdesc">Mastery: ' + esc(mastery) + "</div>" : "") +
       '<div class="cdxdesc">Stamina costs ' + esc(t.active === false ? "nothing (passive)" : techCostStr(e.id)) + " per use — Efficiency −10%/rank and wand discounts apply first, then the x3 stamina rate (hotbar shows the same live number). Fizzled casts refund it.</div>" +
       '<div class="cdxnote">Earned by deeds, not tomes — wield the matching family (bosses exempt; art-wielding horrors spawn carrying matching tiered steel — see mob entries). Key: <b>' + esc(e.id) + "</b></div>";
+  }
+  function shallowDetail(e) {
+    const a = e.a, t = e.t;
+    let fam = "";
+    try {
+      if (window.Entities.techWeaponFams) {
+        const fs = window.Entities.techWeaponFams(e.id) || [];
+        fam = fs.join(" / ") || "";
+      } else fam = (window.CFG.TECH_WEAPON_FAM || {})[e.id] || "";
+    } catch (err) { }
+    let req = "";
+    try {
+      const r = t.req || {};
+      const parts = [];
+      if (r.el) for (const k of Object.keys(r.el)) parts.push(r.el[k] + " " + k + " dmg");
+      if (r.fam) for (const k of Object.keys(r.fam)) parts.push(r.fam[k] + " " + k + " dmg");
+      if (r.anyFam) parts.push(Object.keys(r.anyFam).map(k => r.anyFam[k] + " " + k + " dmg").join(" or ") + " (any)");
+      if (r.kills) parts.push(r.kills + " kills");
+      req = parts.join(" + ");
+    } catch (err) { }
+    let mastery = "";
+    try { if (window.UI && window.UI.masteryDesc) mastery = window.UI.masteryDesc(e.id) || ""; } catch (err) { }
+    return fig('<div class="cdxbig">' + cdxIcon("ability", e.id, 40) + "</div>") + "<h4>" + esc(a.name || t.name || e.id) + "</h4>" +
+      '<div class="cdxsub">' + esc(["shallow art", (a.element || "")].filter(Boolean).join(" · ")) + "</div>" +
+      kv([["Cost", shallowCostStr(e.id)], ["Cooldown", a.cd + "s"], ["Weapon", fam || "—"], ["Unlock", req], ["Hint", t.hint]]) +
+      '<div class="cdxdesc">' + esc(a.desc || "") + "</div>" +
+      (mastery ? '<div class="cdxdesc">Mastery: ' + esc(mastery) + "</div>" : "") +
+      '<div class="cdxdesc">Costs ' + esc(shallowCostStr(e.id)) + " per cast — a little MP plus a little stamina (hotbar shows the same live numbers). Fizzled casts refund both.</div>" +
+      '<div class="cdxnote">Earned by light deeds — arts listing several families (Faux Chop: axe/sword/dagger) gain EVERY listed weapon tree at once and scale with the wielded tier. Key: <b>' + esc(e.id) + "</b></div>";
   }
   function gearDetail(e, isWeapon) {
     const it = e.it;
@@ -1687,7 +1762,7 @@ const maxLv = mobMaxLv(e.id);
       kv([["Role key", role], ["Body", body], ["Kit (" + kit.length + ")", kit.map(abName).join(", ") || "—"]]) +
       "<div class='cdxlvrow' style='margin-bottom:0'>Stats by level (computed live)</div>" +
       classMilestoneHtml(role) +
-      "<div class='cdxnote'>Body shapes the level-1 frame; level grows it (town defenders cap at lv35)." +
+      "<div class='cdxnote'>Body shapes the level-1 frame; level grows it by how they fight (steel → ATK + stamina, spells → MATK + mana, plate → DEF/HP — main weapon + attire bend every level), with level-fit steel + attire, bonus war spells at 40+ (never cataclysms except angels — every angel carries ≥1 cataclysm or deep art), and any tome can be taught (chat or party). Town defenders cap at lv35." +
       (borrowed ? " Outfit-only roles with no kit of their own borrow the villager kit: " + esc(borrowed) + "." : "") + "</div>";
   }
   // ---------- buildings + cultural variants (live CLASSES/LAYOUTS/STYLES) ----------
@@ -2001,7 +2076,10 @@ const maxLv = mobMaxLv(e.id);
     }
     if (cat === "guide") return esc((e && e.sub) || "");
     if (cat === "spell") return (costBase(e.id) ? liveMp(e.id) + " MP" : "free") + " · " + (e.a.kind || "") + " · " + (e.a.element || "");
-    if (cat === "tech") return ((e.t && e.t.active === false) ? "passive" : liveStam(e.id) + " stamina") + " · " + (e.a.element || "");
+    if (cat === "tech") {
+      if (e.a && e.a.kind === "shallow") { const b = shallowBase(e.id); return (b ? b.mp + " MP + " + b.st + " stamina" : "free") + " · shallow · " + (e.a.element || ""); }
+      return ((e.t && e.t.active === false) ? "passive" : liveStam(e.id) + " stamina") + " · deep · " + (e.a.element || "");
+    }
     return ((e.it.price != null) ? e.it.price + "g · " : "") + esc((e.it && e.it.desc || "").slice(0, 48));
   }
   function rowName(cat, e) {
@@ -2021,7 +2099,7 @@ const maxLv = mobMaxLv(e.id);
     if (cat === "divine") return divineDetail(e);
     if (cat === "guide") return guideDetail(e);
     if (cat === "spell") return spellDetail(e);
-    if (cat === "tech") return techDetail(e);
+    if (cat === "tech") return (e.a && e.a.kind === "shallow") ? shallowDetail(e) : techDetail(e);
     if (cat === "weapon") return gearDetail(e, true);
     if (cat === "race") return raceDetail(e);
     if (cat === "class") return classDetail(e);
@@ -2192,12 +2270,15 @@ const maxLv = mobMaxLv(e.id);
     try {
       const m = /(?:^#|&)codex=([A-Za-z0-9_\-]+)(?:\/([A-Za-z0-9_\-]+))?/.exec(h != null ? h : location.hash || "");
       if (!m) return null;
-      return { cat: m[1], id: m[2] || null };
+      let cat = m[1];
+      if (cat === "shallow") cat = "tech"; // legacy links: shallow arts live under Weapon Arts now
+      return { cat, id: m[2] || null };
     } catch (e) { return null; }
   }
   function openPanel(cat, id) {
     ensureCss();
     ensurePanel();
+    try { if (cat === "shallow") cat = "tech"; } catch (e) {}
     if (cat) {
       try {
         const c = CATS.find(c => c.id === cat);

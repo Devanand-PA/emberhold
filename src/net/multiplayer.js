@@ -35,6 +35,8 @@ window.MP = (() => {
     allyReqs: new Map(), // reqId -> {from, name, ts} incoming ally requests
     allyOut: new Map(), // reqId -> {to, ts} outgoing ally requests
     trade: null, // active player trade {offerId, peer, peerName, dir, myId, myN, theirId, theirN, stage}
+    questShares: new Map(), // shareId -> {from, fromName, q, ts} incoming ally quest shares (accept/decline from the log)
+    questShareSent: new Map(), // shareId -> {to, ts} outgoing shares (validates decline/taken notices)
     sleeping: false, sleepInfo: { sleeping: 0, online: 0 },
     tileCache: new Map(), // "cx,cy,lx,ly" -> t (authoritative tile overrides)
     ended: false, // set once the host's explicit end-of-stream arrives
@@ -645,6 +647,31 @@ window.MP = (() => {
             });
           } else r.party = null;
         } catch (e) { r.party = null; }
+        // fellow travelers' beasts (wild-tamed, bought, lent): validated the
+        // same way as the party roster; lent ones tack under their rider in
+        // getRemotes. Old senders omit the field — null keeps "no beasts".
+        try {
+          if (Array.isArray(m.tm)) {
+            const _tt = [];
+            for (const q of m.tm.slice(0, 8)) {
+              if (!q) continue;
+              const _qe = {
+                k: (typeof q.k === "string" && q.k) ? q.k.slice(0, 24) : "beast",
+                n: String((q && q.n) || "Beast").slice(0, 24),
+                lv: Math.max(1, Math.min(125, (q && q.lv) | 0 || 1)),
+                hp: Math.max(0, Math.round(Number((q && q.hp) || 0))),
+                maxHp: Math.max(1, Math.round(Number((q && q.maxHp) || 0) || 40)),
+                x: (q && isFinite(+q.x)) ? +q.x : undefined,
+                y: (q && isFinite(+q.y)) ? +q.y : undefined,
+                tint: (q && typeof q.tint === "string" && q.tint) ? String(q.tint).slice(0, 16) : undefined,
+              };
+              if (q && q.boss) _qe.boss = true;
+              try { const _rr = (q && q.rider != null) ? (+q.rider | 0) : -1; if (_rr >= 0 && _rr < 12) _qe.rider = _rr; } catch (e2) {}
+              _tt.push(_qe);
+            }
+            r.tames = _tt.length ? _tt : null;
+          } else r.tames = null;
+        } catch (e) { r.tames = null; }
         // shadow-clone ditto positions (compact [x,y,hp] triples, cap 4).
         // Old senders omit the field — null keeps the last-known clear.
         try {
@@ -778,6 +805,10 @@ window.MP = (() => {
          if (e.looted) rec.looted = true;
           if (e.tame) rec.tame = true;
           if (e.boss) rec.boss = true;
+          // quest-contract tags ride the hub so shadows credit + loot correctly
+          if (e.qk) rec.qk = String(e.qk).slice(0, 24); else delete rec.qk;
+          if (e.qg) rec.qg = String(e.qg).slice(0, 48); else delete rec.qg;
+          if (e.qf) rec.qf = String(e.qf).slice(0, 40); else delete rec.qf;
          rec.sub = !!e.sub; rec.voidH = !!e.voidH;
          rec.dead = !!e.dead;
          rec.owner = m.from;
@@ -837,6 +868,10 @@ window.MP = (() => {
           if (e.tame) rec.tame = true;
           try { if (e.tsb != null && isFinite(+e.tsb)) rec.tsb = Math.max(0, +e.tsb); } catch (e2) {}
           if (e.boss) rec.boss = true;
+          // quest-contract tags ride the fast channel too (see sendSnapPos)
+          if (e.qk) rec.qk = String(e.qk).slice(0, 24); else delete rec.qk;
+          if (e.qg) rec.qg = String(e.qg).slice(0, 48); else delete rec.qg;
+          if (e.qf) rec.qf = String(e.qf).slice(0, 40); else delete rec.qf;
            // fast channel now carries NPC identity + burrow flags (see sendSnapPos),
           // so joiners converge without waiting for the full snap
           if (e.name) rec.name = String(e.name).slice(0, 24);
@@ -893,6 +928,10 @@ window.MP = (() => {
           if (e.tame) rec.tame = true; else delete rec.tame;
           try { if (e.tsb != null && isFinite(+e.tsb)) rec.tsb = Math.max(0, +e.tsb); } catch (e2) {}
           if (e.boss) rec.boss = true;
+          // quest-contract tags (fallback publisher path — see sendSnap)
+          if (e.qk) rec.qk = String(e.qk).slice(0, 24); else delete rec.qk;
+          if (e.qg) rec.qg = String(e.qg).slice(0, 48); else delete rec.qg;
+          if (e.qf) rec.qf = String(e.qf).slice(0, 40); else delete rec.qf;
           rec.sub = !!e.sub; rec.voidH = !!e.voidH;
           rec.dead = !!e.dead;
           rec.owner = m.from;
@@ -1131,7 +1170,7 @@ window.MP = (() => {
         try {
           if (String(m.to || "").toLowerCase() !== String(M.hash || "").toLowerCase()) return;
           if (m.from === M.hash) return;
-          const amt = Math.max(1, Math.min(9999, Math.round(+m.amount || 0)));
+          const amt = Math.max(1, Math.min(999999, Math.round(+m.amount || 0)));
           if (!(amt > 0)) return;
           let st = null;
           try { if (m.status && typeof m.status.type === "string") st = m.status; } catch (e2) { st = null; }
@@ -1207,7 +1246,7 @@ window.MP = (() => {
             const fh = String(m.fromHash || m.from || "").toLowerCase();
             if (fh && isAlliedHash(fh)) return;
           } catch (eA) {}
-          const amt = Math.max(1, Math.min(9999, Math.round(+m.amount || 0)));
+          const amt = Math.max(1, Math.min(999999, Math.round(+m.amount || 0)));
           if (!(amt > 0)) return;
           let st = null;
           try { if (m.status && typeof m.status.type === "string") st = m.status; } catch (e2) { st = null; }
@@ -1241,7 +1280,7 @@ window.MP = (() => {
           const did = (typeof m.did === "string" && m.did) ? m.did : null;
           if (!did || did !== myDungeonId()) return;
           try { if ((m.dim === "hell" || m.dim === "heaven" || m.dim === "surf") && m.dim !== mpDim()) return; } catch (e) {}
-          const amt = Math.max(1, Math.min(9999, Math.round(+m.amount || 0)));
+          const amt = Math.max(1, Math.min(999999, Math.round(+m.amount || 0)));
           if (!(amt > 0)) return;
           let st = null;
           try { if (m.status && typeof m.status.type === "string") st = m.status; } catch (e2) { st = null; }
@@ -1270,7 +1309,7 @@ window.MP = (() => {
         try {
           if (m.from === M.hash) return;
           const mobId = (typeof m.mob === "string" && m.mob) ? m.mob.slice(0, 48) : null;
-          const dmg = Math.max(1, Math.min(9999, Math.round(+m.amount || 0)));
+          const dmg = Math.max(1, Math.min(999999, Math.round(+m.amount || 0)));
           if (!mobId || !(dmg > 0)) return;
           const G = window.Game && window.Game.G;
           if (!G || !G.player) return;
@@ -1576,6 +1615,54 @@ window.MP = (() => {
         } catch (e) {}
         return;
       }
+      if (m.t === "questShare") {
+        // an ally shares one of their quests: only allies, only addressed to
+        // me. The share sits in the inbox until I take it up or turn it down
+        // from the 📜/🏛️ log — nothing is forced on anyone.
+        try {
+          if (String(m.to || "").toLowerCase() !== String(M.hash || "").toLowerCase()) return;
+          if (m.from === M.hash) return;
+          const from = String(m.from || "").toLowerCase();
+          if (!isAlliedHash(from)) return;
+          const shareId = String(m.shareId || "").slice(0, 16);
+          if (!shareId || M.questShares.has(shareId)) return;
+          const q = canonQuestSharePayload(m.q);
+          if (!q) return;
+          try {
+            if (M.questShares.size >= 5) {
+              const first = M.questShares.keys().next();
+              if (first && !first.done) M.questShares.delete(first.value);
+            }
+          } catch (e) {}
+          M.questShares.set(shareId, { from, fromName: allyName(from), q, ts: Date.now() });
+          try { window.UI.toast("🤝 " + allyName(from) + " shares “" + (q.title || "a quest") + "” — open 📜 Quests to take it up or turn it down.", 7000); } catch (e) {}
+          try { if (window.UI && window.UI.renderQuests) window.UI.renderQuests(); } catch (e) {}
+        } catch (e) {}
+        return;
+      }
+      if (m.t === "questShareDecline") {
+        try {
+          if (String(m.to || "").toLowerCase() !== String(M.hash || "").toLowerCase()) return;
+          if (m.from === M.hash) return;
+          const shareId = String(m.shareId || "").slice(0, 16);
+          if (!shareId || !M.questShareSent.has(shareId)) return;
+          M.questShareSent.delete(shareId);
+          try { window.UI.toast("🤝 " + allyName(m.from) + " turned down your shared quest.", 4000); } catch (e) {}
+        } catch (e) {}
+        return;
+      }
+      if (m.t === "questShareTaken") {
+        try {
+          if (String(m.to || "").toLowerCase() !== String(M.hash || "").toLowerCase()) return;
+          if (m.from === M.hash) return;
+          const shareId = String(m.shareId || "").slice(0, 16);
+          if (!shareId || !M.questShareSent.has(shareId)) return;
+          M.questShareSent.delete(shareId);
+          const ttl = String(m.title || "your quest").slice(0, 48);
+          try { window.UI.toast("🤝 " + allyName(m.from) + " took up “" + ttl + "” — hunt together!", 5000); } catch (e) {}
+        } catch (e) {}
+        return;
+      }
       if (m.t === "tame") {
         // someone tamed a shared beast: the wild mob is gone on every screen
         // (tamed, not slain — no corpse, no loot, no kill credit). The tamer
@@ -1648,6 +1735,17 @@ window.MP = (() => {
           // merges are idempotent and monotonic (done wins, accepts union),
           // so every burst applies with no dedupe and no rebroadcast.
           if (window.Guild && window.Guild.onMpCommSync) window.Guild.onMpCommSync(m);
+        } catch (e) {}
+        return;
+      }
+      if (m.t === "guildQuestNeed") {
+        // another player's contract shortfall: the simulator stocks their
+        // grounds (thin clients never mint). Self-echoes never arrive
+        // (hub drops them by from), still guarded here.
+        try {
+          if (m.from === M.hash) return;
+          if (!Array.isArray(m.needs)) return;
+          if (window.Guild && window.Guild.onMpQuestNeed) window.Guild.onMpQuestNeed(m.from, m.needs);
         } catch (e) {}
         return;
       }
@@ -1989,6 +2087,64 @@ window.MP = (() => {
   // The server keeps no world state (no chat history, no entity hub, no
   // clock): join only learns the session directory (host + members). The
   // living world arrives live from the host (snap/pos/tiles over P2P+relay).
+  // Ghost-image fix: the hub roster carries every member's hub-clock
+  // lastSeen (touched on each relayed pos), so a silent entry can be judged
+  // against the HUB's truth instead of only local silence. A remote that is
+  // BOTH pos-silent >10s AND (absent from the roster OR hub-stale >12s
+  // behind our own hub stamp) is a disconnected client — closed tab,
+  // backgrounded browser, or a rejoin under a fresh identity — not lag, so
+  // drop it instead of parading a frozen ghost for the full 60s backstop.
+  // Clocks stay comparable because both stamps are hub-clock (our own
+  // lastSeen minus theirs). Reconnecting is seamless: the next accepted
+  // pos recreates the entry, and name/look/gear ride every pos.
+  function noteHubRoster(members) {
+    try {
+      const now = Date.now();
+      const seen = new Map();
+      let selfLS = 0;
+      const me = String(M.hash || "").toLowerCase();
+      for (const p of (members || [])) {
+        if (!p || !p.hash) continue;
+        const h = String(p.hash).toLowerCase();
+        const ls = +p.lastSeen || 0;
+        if (!seen.has(h) || ls > seen.get(h)) seen.set(h, ls);
+        if (h === me && ls > selfLS) selfLS = ls;
+      }
+      M._hubSelfLS = selfLS;
+      M._hubRosterAt = now;
+      for (const r of M.remotes.values()) {
+        if (!r || !r.hash) continue;
+        const h = String(r.hash).toLowerCase();
+        if (seen.has(h)) { r.hubSeen = seen.get(h); r.hubGone = false; }
+        else r.hubGone = true;
+      }
+      pruneHubGhosts(now);
+    } catch (e) {}
+  }
+  function hubGhostStale(r, now) {
+    try {
+      if (!r) return false;
+      if (!(now - (r.lastUpdate || 0) > 10000)) return false;
+      if (r.hubGone) return true;
+      // roster too old to trust (polls run ~8s): fall back to the 60s rule
+      if (!(Date.now() - (M._hubRosterAt || 0) < 30000)) return false;
+      const selfLS = +M._hubSelfLS || 0;
+      const seen = +r.hubSeen || 0;
+      if (selfLS > 0 && seen > 0 && (selfLS - seen) > 12000) return true;
+    } catch (e) {}
+    return false;
+  }
+  function pruneHubGhosts(now) {
+    try {
+      now = now || Date.now();
+      const me = String(M.hash || "").toLowerCase();
+      for (const [k, r] of [...M.remotes]) {
+        if (!r) { try { M.remotes.delete(k); } catch (e) {} continue; }
+        try { if (String(k).toLowerCase() === me) continue; } catch (e) {}
+        if (hubGhostStale(r, now)) { try { M.remotes.delete(k); } catch (e) {} }
+      }
+    } catch (e) {}
+  }
   function applyJoin(j) {
     M.spawnType = j.spawnType; M.spawnName = j.spawnName;
     // Clock comes from the host's live snapshots, not the join reply. The hub
@@ -2009,6 +2165,9 @@ window.MP = (() => {
       r.lastUpdate = r.lastUpdate || 0;
       M.remotes.set(p.hash, r);
     }
+    // hub-aware ghost pruning: drop hub-confirmed-gone entries now instead
+    // of showing them frozen until the 60s backstop (see noteHubRoster)
+    try { noteHubRoster(members); } catch (e) {}
     try { if (window.UI.renderMpChat) window.UI.renderMpChat(); } catch (e) {}
     try { if (window.UI.renderMpPresence) window.UI.renderMpPresence(); } catch (e) {}
     // late-join coverage: fellow travelers who woke towers or claimed delves
@@ -2048,9 +2207,15 @@ window.MP = (() => {
         if (!r.lastUpdate) r.lastUpdate = 0;
         M.remotes.set(p.hash, r);
       }
-      // Drop only members the hub no longer lists AND silent >60s (pos may
-      // just be paused while typing). Never kick on silence alone.
-      for (const k of [...M.remotes.keys()]) if (!seen.has(k)) {
+      // Drop hub-confirmed ghosts: entries the roster no longer lists, or
+      // hub-stale >12s behind our own stamp, AND pos-silent >10s are
+      // disconnected clients (closed tab, backgrounded browser, fresh-
+      // identity rejoin) — not lag, since live pos arrives ~8Hz and the
+      // hub touches lastSeen on every relayed pos. Reconnecting recreates
+      // the entry on the next pos with full name/look/gear. The 60s
+      // silence backstop below only covers hub-unknown entries.
+      try { noteHubRoster(members); } catch (e) {}
+      for (const k of [...M.remotes.keys()]) if (!seen.has(k) && !seen.has(String(k).toLowerCase())) {
         const r = M.remotes.get(k);
         if (!r.lastUpdate || Date.now() - r.lastUpdate > 60000) M.remotes.delete(k);
       }
@@ -2515,6 +2680,40 @@ window.MP = (() => {
         if (!partyOut.length) partyOut = null;
       }
     } catch (e) { partyOut = null; }
+    // tamed + bought beasts ride the pos channel next to the party roster so
+    // fellow travelers SEE every beast (wild-tamed, market-bought, lent) with
+    // real positions, names + HP — render-only everywhere else, never simmed.
+    // The owner-ridden beast is skipped (it draws under the hero via mk/mt);
+    // lent beasts carry their rider's party index and tack under that rider.
+    let tameOut = null;
+    try {
+      const _G2 = window.Game && window.Game.G;
+      const _p2 = _G2 && _G2.player;
+      if (_p2) {
+        const _ts = (window.Entities && window.Entities.activeTames) ? window.Entities.activeTames(_p2) : ((_p2.tames || []).filter(t => t && !t.stabled && t.inParty !== false && !t.breeding));
+        // party order mirrors partyOut above, so rider indexes line up
+        const _partyIds = [];
+        try { for (const _nn of ((_G2.npcs || []))) { if (_nn && _nn.inParty) { _partyIds.push(String(_nn.id)); if (_partyIds.length >= 12) break; } } } catch (e2) {}
+        let _rideId = null;
+        try { const _am = window.Game.activeMount && window.Game.activeMount(); if (_am && _am.id) _rideId = String(_am.id); } catch (e2) {}
+        tameOut = [];
+        for (const _t of (_ts || [])) {
+          if (!_t || _t.stabled || !(_t.hp > 0) || _t.breeding) continue;
+          if (_rideId && String(_t.id) === _rideId) continue;
+          const _te = { k: String(_t.kind || "beast").slice(0, 24), n: String(_t.name || _t.kind || "Beast").slice(0, 24), lv: Math.max(1, Math.min(125, _t.lv | 0 || 1)), hp: Math.max(0, Math.ceil(_t.hp || 0)), maxHp: Math.max(1, _t.maxHp || 40) };
+          try {
+            const _tx = +_t.x, _ty = +_t.y;
+            if (isFinite(_tx) && isFinite(_ty)) { _te.x = +_tx.toFixed(2); _te.y = +_ty.toFixed(2); }
+          } catch (e2) {}
+          if (typeof _t.tint === "string" && _t.tint) _te.tint = _t.tint.slice(0, 16);
+          if (_t.isBoss) _te.boss = true;
+          try { if (_t.riderId) { const _ri = _partyIds.indexOf(String(_t.riderId)); if (_ri >= 0) _te.rider = _ri; } } catch (e2) {}
+          tameOut.push(_te);
+          if (tameOut.length >= 8) break;
+        }
+        if (!tameOut.length) tameOut = null;
+      }
+    } catch (e) { tameOut = null; }
       const obj = {
         t: "pos", channelId: M.channelId, hash: M.hash,
         sq: nextSq(), st: nowT, ep: M._epoch,
@@ -2543,6 +2742,7 @@ window.MP = (() => {
         app: appOut,
         w: (p.equipment && p.equipment.weapon) || "-",
         party: partyOut,
+        tm: tameOut,
         a: (p.equipment && p.equipment.armor) || "-",
         s: (p.equipment && p.equipment.shield) || "-",
         o: (() => { try { const hb = p.hotbar; const oi = (window.Items && window.Items.getOffhandSlot) ? window.Items.getOffhandSlot(p) : -1; const sl = hb && hb[oi]; if (sl && sl.kind === "item" && sl.id && window.Items.ITEMS[sl.id] && window.Items.ITEMS[sl.id].slot === "weapon") return sl.id; } catch (e) { } return "-"; })(),
@@ -2644,6 +2844,10 @@ window.MP = (() => {
             gold: (mo.corpse ? Math.max(0, Math.round(mo.corpseGold || 0)) : undefined),
           });
           if (mo.looted) list[list.length - 1].looted = true;
+          // quest-contract tags (fallback publisher path — see sendSnap)
+          if (mo.questGuild) list[list.length - 1].qg = String(mo.questGuild).slice(0, 48);
+          if (mo.questKind) list[list.length - 1].qk = String(mo.questKind).slice(0, 24);
+          if (mo.questFetch) list[list.length - 1].qf = String(mo.questFetch).slice(0, 40);
           if (mo.submerged) list[list.length - 1].sub = true;
           if (mo.voidHidden) list[list.length - 1].voidH = true;
           if (mo.tameOffer && mo.hp > 0) list[list.length - 1].tame = true;
@@ -2668,7 +2872,9 @@ window.MP = (() => {
   // Every occupant publishes its OWNED dungeon mobs (owner==me); the union is
   // the delve. Regular spawns + the delve lord are gated to amDungeonSim (one
   // spawner, no duplicates); triggered teeth are owned by whoever touched
-  // them. All clients adopt lower hp (damage never lost) and materialize
+  // them, so non-sim occupants publish their own teeth too (otherwise teeth
+  // triggered by anyone but the sim stay invisible to the rest of the delve).
+  // All clients adopt lower hp (damage never lost) and materialize
   // unknown ids as glide shadows (remoteOwned, no local AI).
   function sendDEnts() {
     if (!M.active) return;
@@ -2679,20 +2885,37 @@ window.MP = (() => {
       if (!did) return;
       // solo delve: nobody to share with — stay silent, simulate locally
       if (!dungeonOccupants(did).some((h) => h !== String(M.hash || "").toLowerCase())) return;
+      const me = String(M.hash || "").toLowerCase();
       // single sim per instance (unified world server): only the elected sim
       // publishes positions; everyone else stays silent and renders. The sim
       // publishes everything it simulates (legacy owner tags ignored).
-      if (!amDungeonSim(did)) return;
-      const me = String(M.hash || "").toLowerCase();
+      // Exception: a non-sim occupant still publishes its OWN triggered teeth
+      // (chest/portal mimics it woke) — it keeps simulating them, so it is
+      // their one true publisher and the rest of the delve can see them.
+      const isSim = amDungeonSim(did);
       const px = G.player.x, py = G.player.y;
       const list = [];
-      for (const mo of (G.mobs || [])) {
+      // Bosses ride first and instance-wide: the delve lord and the
+      // Threshold Devourer spawn when ANY occupant nears the boss room, so
+      // a mate scouting ahead would otherwise stand in an empty throne room
+      // while the pair idles past the 46-tile gate (or gets cut by the
+      // 30-entry cap). Bosses are rare, so this costs nothing; regulars
+      // stay range-gated as before.
+      const _all = (G.mobs || []);
+      const ordered = [];
+      for (const mo of _all) if (mo && mo.isBoss) ordered.push(mo);
+      for (const mo of _all) if (!mo || !mo.isBoss) ordered.push(mo);
+      for (const mo of ordered) {
         if (!mo || !mo.id || (mo.corpse && mo.looted)) continue; // lootable corpses ride too (peers raid them)
         if (String(mo.dungeonId || "") !== String(G.dungeon.id)) continue;
         // sim owns the instance: skip foreign replicas (never re-publish them)
         try { if (mo.remoteOwned) continue; } catch (e) {}
+        // non-sim occupants publish nothing but their own triggered teeth
+        try {
+          if (!isSim && !(mo.mimicTricked || mo.mimicExposed || mo.isPortalMimic)) continue;
+        } catch (e) {}
         const d = Math.hypot((mo.x || 0) - px, (mo.y || 0) - py);
-        if (d > 46) continue;
+        if (d > 46 && !mo.isBoss) continue;
         const e = {
           id: String(mo.id).slice(0, 48), kind: String(mo.kind || "mob").slice(0, 24),
           x: +(+mo.x).toFixed(2), y: +(+mo.y).toFixed(2),
@@ -2756,7 +2979,7 @@ window.MP = (() => {
       // mob/world wounds always route, or allied travelers would be
       // immune to all PvE instead of just shielded from friendly fire.
       try { if (info && info.pvp && isAlliedHash(toHash)) return; } catch (e) {}
-      amount = Math.max(1, Math.min(9999, Math.round(+amount || 0)));
+      amount = Math.max(1, Math.min(999999, Math.round(+amount || 0)));
       if (!(amount > 0)) return;
       info = info || {};
       const did = (typeof info.did === "string" && info.did) ? info.did : (myDungeonId() || null);
@@ -2791,7 +3014,7 @@ window.MP = (() => {
     if (!M.active) return;
     try {
       if (typeof mobId !== "string" || !mobId) return;
-      dmg = Math.max(1, Math.min(9999, Math.round(+dmg || 0)));
+      dmg = Math.max(1, Math.min(999999, Math.round(+dmg || 0)));
       if (!(dmg > 0)) return;
       const now = Date.now();
       const last = _takenSentAt.get(mobId) || 0;
@@ -2912,7 +3135,7 @@ window.MP = (() => {
       // PvP-only (info.pvp): mob/world wounds always route, or allied
       // travelers would be immune to all PvE.
       try { if (info && info.pvp && isAlliedHash(toHash)) return; } catch (e) {}
-      amount = Math.max(1, Math.min(9999, Math.round(+amount || 0)));
+      amount = Math.max(1, Math.min(999999, Math.round(+amount || 0)));
       if (!(amount > 0)) return;
       info = info || {};
       let st = null;
@@ -2952,7 +3175,7 @@ window.MP = (() => {
     try { if (o.did && amDungeonSim(String(o.did))) return false; } catch (e) {}
     try {
       if (!o || typeof o.id !== "string" || !o.id) return false;
-      const amount = Math.max(1, Math.min(9999, Math.round(+o.amount || 0)));
+      const amount = Math.max(1, Math.min(999999, Math.round(+o.amount || 0)));
       if (!(amount > 0)) return false;
       let st = null;
       try {
@@ -3004,6 +3227,10 @@ window.MP = (() => {
         aid: (typeof info.aid === "string" && info.aid) ? info.aid.slice(0, 48) : null,
         el: String(info.el || "physical").slice(0, 16), fam: String(info.fam || "unarmed").slice(0, 16),
         move: (typeof info.move === "string" && info.move) ? info.move.slice(0, 32) : null,
+        // quest-credit context for the killer's contract progress
+        qk: (typeof info.qk === "string" && info.qk) ? info.qk.slice(0, 24) : null,
+        qg: (typeof info.qg === "string" && info.qg) ? info.qg.slice(0, 48) : null,
+        dx: isFinite(+info.dx) ? +info.dx : null, dy: isFinite(+info.dy) ? +info.dy : null,
       });
       return true;
     } catch (e) { return false; }
@@ -3019,7 +3246,7 @@ window.MP = (() => {
       // route, or allied joiners would be immune to all PvE. Hero-side blows
       // to allies are already blocked upstream by isAlly in dealDamage.
       try { if (info && info.pvp && isAlliedHash(toHash)) return; } catch (e) {}
-      amount = Math.max(1, Math.min(9999, Math.round(+amount || 0)));
+      amount = Math.max(1, Math.min(999999, Math.round(+amount || 0)));
       if (!(amount > 0)) return;
       const p = M.hurtPend[toHash] || (M.hurtPend[toHash] = { amount: 0, info: null });
       try {
@@ -3105,7 +3332,7 @@ window.MP = (() => {
     try {
       if (!evt || typeof evt.kind !== "string") return;
       const k = evt.kind;
-      if (k !== "melee" && k !== "proj" && k !== "cast" && k !== "blast" && k !== "angel") return;
+      if (k !== "melee" && k !== "proj" && k !== "cast" && k !== "blast" && k !== "angel" && k !== "hazard" && k !== "orb" && k !== "wave" && k !== "cata") return;
       // delves share visuals per-instance (same did replays, other instances ignore)
       let did = null;
       try {
@@ -3162,6 +3389,46 @@ window.MP = (() => {
         o.snd = evt.snd === "heal" ? "heal" : "fire";
       } else if (k === "angel") {
         o.color = "#fff7ae";
+      } else if (k === "hazard") {
+        // lingering spellfields: whirlpools, fire-lines, volcano vents, ice
+        // sheets, dawn domes, blood moons. Visual-only replicas on receivers
+        // (src null + dmg 0 there — wounds stay on the owner's machine).
+        o.abId = String(evt.abId || "").slice(0, 24);
+        o.color = String(evt.color || "#ffffff").slice(0, 16);
+        if (isFinite(+evt.r)) o.r = Math.max(0.3, Math.min(8, +evt.r));
+        if (isFinite(+evt.life)) o.life = Math.max(0.5, Math.min(9, +evt.life));
+        if (isFinite(+evt.pulseR)) o.pulseR = Math.max(0.5, Math.min(8, +evt.pulseR));
+        if (isFinite(+evt.ang)) o.ang = +evt.ang;
+        if (isFinite(+evt.seed)) o.seed = +evt.seed;
+        if (evt.follow) o.follow = true;
+      } else if (k === "orb") {
+        // hunting/orbiting spell bodies: storm blades, void hole.
+        o.abId = String(evt.abId || "").slice(0, 24);
+        o.color = String(evt.color || "#ffffff").slice(0, 16);
+        o.mode = evt.mode === "orbit" ? "orbit" : "homing";
+        if (isFinite(+evt.vx)) o.vx = Math.max(-30, Math.min(30, +evt.vx));
+        if (isFinite(+evt.vy)) o.vy = Math.max(-30, Math.min(30, +evt.vy));
+        if (isFinite(+evt.life)) o.life = Math.max(0.5, Math.min(9, +evt.life));
+        if (isFinite(+evt.ang)) o.ang = +evt.ang;
+        if (isFinite(+evt.angSpd)) o.angSpd = Math.max(0.5, Math.min(8, +evt.angSpd));
+        if (isFinite(+evt.radius)) o.radius = Math.max(0.5, Math.min(5, +evt.radius));
+        if (isFinite(+evt.ox)) o.ox = +evt.ox;
+        if (isFinite(+evt.oy)) o.oy = +evt.oy;
+        if (Array.isArray(evt.trail)) {
+          const tr = [];
+          for (const tc of evt.trail) { if (tr.length >= 4) break; if (typeof tc === "string" && tc) tr.push(tc.slice(0, 16)); }
+          if (tr.length) o.trail = tr;
+        }
+      } else if (k === "wave") {
+        // tidal-wave rider pos: receivers puff foam under the remote hero.
+        if (isFinite(+evt.ang)) o.ang = +evt.ang;
+        if (isFinite(+evt.r)) o.r = Math.max(0.5, Math.min(4, +evt.r));
+      } else if (k === "cata") {
+        // cataclysm release burst: beams, skyfire, novas (zones ride hazard).
+        o.abId = String(evt.abId || "").slice(0, 24);
+        o.color = String(evt.color || "#ffffff").slice(0, 16);
+        if (isFinite(+evt.face)) o.face = +evt.face;
+        if (isFinite(+evt.r)) o.r = Math.max(0.5, Math.min(14, +evt.r));
       }
       broadcastHot(o, { key: "act", throttleMs: 80, fallback: true });
     } catch (e) {}
@@ -3756,6 +4023,10 @@ window.MP = (() => {
             gold: (mo.corpse ? Math.max(0, Math.round(mo.corpseGold || 0)) : undefined),
           });
           if (mo.looted) list[list.length - 1].looted = true;
+          // quest-contract tags ride along so shadows credit + loot correctly
+          if (mo.questGuild) list[list.length - 1].qg = String(mo.questGuild).slice(0, 48);
+          if (mo.questKind) list[list.length - 1].qk = String(mo.questKind).slice(0, 24);
+          if (mo.questFetch) list[list.length - 1].qf = String(mo.questFetch).slice(0, 40);
           if (mo.submerged) list[list.length - 1].sub = true;
           if (mo.voidHidden) list[list.length - 1].voidH = true;
            // yield flag rides along: a beast the sim saw yield shows its
@@ -3834,7 +4105,7 @@ window.MP = (() => {
       const list = [];
       const consider = (id, e) => {
         try { alive.add(id); } catch (e2) {}
-        const sig = [e.x, e.y, e.hp, e.dead ? 1 : 0, e.face || 0, e.looted ? 1 : 0, e.sub ? 1 : 0, e.voidH ? 1 : 0, e.name || "", e.role || "", e.tint || "", e.lv || 0].join("|");
+        const sig = [e.x, e.y, e.hp, e.dead ? 1 : 0, e.face || 0, e.looted ? 1 : 0, e.sub ? 1 : 0, e.voidH ? 1 : 0, e.name || "", e.role || "", e.tint || "", e.lv || 0, e.qg || "", e.qk || "", e.qf || ""].join("|");
         const p = prev.get(id);
         const moved = !p || Math.hypot(e.x - p.x, e.y - p.y) > 0.03;
         if (!full && p && p.sig === sig && nowQ - (p.moveT || 0) >= 350) return; // idle: silent
@@ -3875,6 +4146,10 @@ window.MP = (() => {
             gold: (mo.corpse ? Math.max(0, Math.round(mo.corpseGold || 0)) : undefined),
          };
           if (mo.looted) e.looted = true;
+          // quest-contract tags ride the fast channel too (see sendSnap)
+          if (mo.questGuild) e.qg = String(mo.questGuild).slice(0, 48);
+          if (mo.questKind) e.qk = String(mo.questKind).slice(0, 24);
+          if (mo.questFetch) e.qf = String(mo.questFetch).slice(0, 40);
           if (mo.submerged) e.sub = true;
           if (mo.voidHidden) e.voidH = true;
           if (mo.isBoss) e.boss = true;
@@ -4212,6 +4487,10 @@ window.MP = (() => {
               // diggings mound on replicas instead of walking around up top
               mo.submerged = !!s.sub; mo.voidHidden = !!s.voidH;
               if (s.boss) mo.isBoss = true;
+              // quest-contract tags ride the shadow: kind credits + fetch loot resolve locally
+              if (s.qg) mo.questGuild = String(s.qg).slice(0, 48);
+              if (s.qk) mo.questKind = String(s.qk).slice(0, 24);
+              if (s.qf) mo.questFetch = String(s.qf).slice(0, 40);
               if (mo.x == null || !isFinite(mo.x)) { mo.x = mo.tx; mo.y = mo.ty; }
               if (typeof s.hp === "number") mo.hp = Math.max(0, s.hp);
               if (s.dead && mo.hp > 0) mo.hp = 0;
@@ -4261,6 +4540,10 @@ window.MP = (() => {
              } catch (eR) {}
              // the host covers this mob: become a replica and glide to it
              mo.remoteOwned = true; mo.owner = s.owner || M.hostHash;
+             // quest tags converge to host truth (same mob, same contract)
+             if (s.qg) mo.questGuild = String(s.qg).slice(0, 48);
+             if (s.qk) mo.questKind = String(s.qk).slice(0, 24);
+             if (s.qf) mo.questFetch = String(s.qf).slice(0, 40);
              mo.tx = isFinite(+s.rx) ? +s.rx : +s.x; mo.ty = isFinite(+s.ry) ? +s.ry : +s.y;
              if (isFinite(+s.face)) mo.faceAng = +s.face;
               mo.submerged = !!s.sub; mo.voidHidden = !!s.voidH;
@@ -4329,6 +4612,10 @@ window.MP = (() => {
               mk.hp = Math.max(0, s.hp != null ? s.hp : tpl.hp);
               mk.maxHp = s.maxHp || mk.maxHp;
              mk.remoteOwned = true; mk.owner = s.owner || null;
+             // quest tags ride the shadow: kind credits + fetch loot resolve locally
+             if (s.qg) mk.questGuild = String(s.qg).slice(0, 48);
+             if (s.qk) mk.questKind = String(s.qk).slice(0, 24);
+             if (s.qf) mk.questFetch = String(s.qf).slice(0, 40);
               mk.submerged = !!s.sub; mk.voidHidden = !!s.voidH;
              if (s.boss) mk.isBoss = true;
              try { if (s.tsb != null && isFinite(+s.tsb)) { mk.tameSubmitBase = Math.max(0, +s.tsb); try { mk._apexTameRolled = false; mk._apexTameChosen = false; } catch (eT) {} } } catch (eT) {}
@@ -5411,10 +5698,62 @@ window.MP = (() => {
   function getRemotes() {
     const out = [];
     const now = Date.now();
+    // hub-ghost sweep (throttled): a roster poll may be up to ~8s away, so
+    // reap hub-confirmed-gone entries here too — ghosts vanish within
+    // seconds of crossing the silence threshold instead of sitting frozen
+    try {
+      if (M.active && (!M._hubPruneAt || now - M._hubPruneAt > 5000)) {
+        M._hubPruneAt = now;
+        pruneHubGhosts(now);
+      }
+    } catch (e) {}
     for (const r of M.remotes.values()) {
       if (now - (r.lastUpdate || 0) > 60000) continue;
       const dx = (r.x ?? r.rx ?? 0) - (r.rx ?? r.x ?? 0);
       const dy = (r.y ?? r.ry ?? 0) - (r.ry ?? r.y ?? 0);
+      // follower + beast pin positions (render-only views, never simulated)
+      const partyViews = Array.isArray(r.party) ? r.party.map((q, qi) => {
+        // real follower position when the sender runs new code; otherwise
+        // the legacy ring around the owner (old senders omit x/y)
+        const _hx = (q && isFinite(+q.x)) ? +q.x : (r.rx ?? r.x ?? 0) + Math.cos(qi * 2.4 + 0.8) * 1.3;
+        const _hy = (q && isFinite(+q.y)) ? +q.y : (r.ry ?? r.y ?? 0) + Math.sin(qi * 2.4 + 0.8) * 1.3;
+        return {
+          id: "remote_" + r.hash + "_p" + qi, kind: "npc",
+          name: (q && q.n) || "Ally", lv: (q && q.lv) || 1, hp: (q && q.hp) || 0, maxHp: (q && q.maxHp) || 40,
+          x: _hx, y: _hy, gx: _hx, gy: _hy,
+          role: (q && q.role) || "villager", tint: (q && q.tint) || "#4da3ff",
+          appearance: (q && q.app) || null,
+          isRemoteParty: true, remoteHash: r.hash, ownerName: r.name || "Traveler",
+        };
+      }) : null;
+      // their beasts (wild-tamed, bought, lent) ride along the same way —
+      // lent ones tack under their rider instead of doubling the draw
+      const tameViews = (() => {
+        try {
+          if (!Array.isArray(r.tames) || !r.tames.length) return null;
+          const _tv = [];
+          for (let _ti = 0; _ti < r.tames.length && _ti < 8; _ti++) {
+            const _q = r.tames[_ti];
+            if (!_q) continue;
+            const _ri = (_q.rider != null && isFinite(+_q.rider)) ? (+_q.rider | 0) : -1;
+            if (_ri >= 0 && partyViews && partyViews[_ri]) {
+              try { partyViews[_ri].mount = { kind: String(_q.k || "beast").slice(0, 24), tint: (typeof _q.tint === "string" && _q.tint) ? _q.tint.slice(0, 16) : null }; } catch (eM) {}
+              continue;
+            }
+            const _kx = isFinite(+_q.x) ? +_q.x : (r.rx ?? r.x ?? 0) + Math.cos(_ti * 2.1 + 0.3) * 1.6;
+            const _ky = isFinite(+_q.y) ? +_q.y : (r.ry ?? r.y ?? 0) + Math.sin(_ti * 2.1 + 0.3) * 1.6;
+            _tv.push({
+              id: "remote_" + r.hash + "_t" + _ti, kind: String((_q && _q.k) || "beast").slice(0, 24),
+              name: (_q && _q.n) || "Beast", lv: (_q && _q.lv) || 1, hp: (_q && _q.hp) || 0, maxHp: (_q && _q.maxHp) || 40,
+              x: _kx, y: _ky, gx: _kx, gy: _ky,
+              tint: (_q && _q.tint) || "#8a5a33",
+              isBoss: !!(_q && _q.boss),
+              isRemoteTame: true, remoteHash: r.hash, ownerName: r.name || "Traveler",
+            });
+          }
+          return _tv.length ? _tv : null;
+        } catch (e) { return null; }
+      })();
       out.push({
         id: "remote_" + r.hash, kind: "npc", isRemotePlayer: true, remoteHash: r.hash,
         name: r.name || "Traveler", role: r.role || "adventurer", lv: r.lv || 1,
@@ -5435,20 +5774,9 @@ window.MP = (() => {
         // player-built overlays (receive-path validated [x,y,code,dim] arrays).
         pl: Array.isArray(r.pl) ? r.pl : null,
         // followers ride along as pin positions (render-only, never sim)
-        party: Array.isArray(r.party) ? r.party.map((q, qi) => {
-          // real follower position when the sender runs new code; otherwise
-          // the legacy ring around the owner (old senders omit x/y)
-          const _hx = (q && isFinite(+q.x)) ? +q.x : (r.rx ?? r.x ?? 0) + Math.cos(qi * 2.4 + 0.8) * 1.3;
-          const _hy = (q && isFinite(+q.y)) ? +q.y : (r.ry ?? r.y ?? 0) + Math.sin(qi * 2.4 + 0.8) * 1.3;
-          return {
-            id: "remote_" + r.hash + "_p" + qi, kind: "npc",
-            name: (q && q.n) || "Ally", lv: (q && q.lv) || 1, hp: (q && q.hp) || 0, maxHp: (q && q.maxHp) || 40,
-            x: _hx, y: _hy, gx: _hx, gy: _hy,
-            role: (q && q.role) || "villager", tint: (q && q.tint) || "#4da3ff",
-            appearance: (q && q.app) || null,
-            isRemoteParty: true, remoteHash: r.hash, ownerName: r.name || "Traveler",
-          };
-        }) : null,
+        party: partyViews,
+        // their beasts (wild-tamed, bought, lent) ride along beside them
+        tames: tameViews,
         // look: custom face/outfit + equipped ids ride the pos channel
         appearance: r.app || null, w: r.w || null, a: r.a || null, s: r.s || null, o: r.o || null,
         equipment: ((r.w || r.a || r.s) ? { weapon: r.w || null, armor: r.a || null, shield: r.s || null } : null),
@@ -5523,7 +5851,7 @@ window.MP = (() => {
   }
   async function healPlayer(toHash, amount) {
     if (!M.active) throw new Error("Not in a channel.");
-    amount = Math.max(1, Math.min(9999, Math.round(+amount || 0)));
+    amount = Math.max(1, Math.min(999999, Math.round(+amount || 0)));
     if (!(amount > 0)) throw new Error("Bad amount.");
     const raw = await rpc("mpHeal", { channelId: M.channelId, fromHash: M.hash, toHash: String(toHash || "").toLowerCase(), amount });
     return JSON.parse(raw);
@@ -5690,6 +6018,181 @@ window.MP = (() => {
     if (peer) broadcastNet({ t: "tradeDecline", channelId: M.channelId, hash: M.hash, from: M.hash, to: peer, offerId }, { viaServer: true });
     try { if (window.UI && window.UI.renderPlayerTrade) window.UI.renderPlayerTrade(); } catch (e) {}
     return true;
+  }
+  // ---------- ally quest sharing ----------
+  // Validate + sanitize a share payload into canonical shape, or null.
+  // Used for both building an outgoing share and vetting an incoming one.
+  function canonQuestSharePayload(raw) {
+    try {
+      if (!raw || typeof raw !== "object") return null;
+      const sys = raw.sys === "g" ? "g" : (raw.sys === "v" ? "v" : null);
+      if (!sys) return null;
+      const out = { sys };
+      if (sys === "v") {
+        const type = String(raw.type || "");
+        if (type !== "slay" && type !== "fetch" && type !== "clear") return null;
+        out.type = type;
+        const need = Math.max(1, Math.min(type === "slay" ? 10 : 6, Math.round(Number(raw.need) || 0) || 0));
+        if (!(need > 0)) return null;
+        out.need = need;
+        if (type === "slay") {
+          const mk = String(raw.mobKind || "").slice(0, 24);
+          try { if (!(window.CFG && window.CFG.MOB_TEMPLATES && window.CFG.MOB_TEMPLATES[mk])) return null; } catch (e) { return null; }
+          out.mobKind = mk;
+        } else if (type === "fetch") {
+          const iid = String(raw.itemId || "").slice(0, 40);
+          try { if (!iid || !window.Items.ITEMS[iid]) return null; } catch (e) { return null; }
+          out.itemId = iid;
+        }
+        out.diff = Math.max(1, Math.min(5, Math.round(Number(raw.diff) || 1)));
+      } else {
+        const kind = String(raw.kind || "");
+        if (kind !== "kill" && kind !== "clear" && kind !== "fetch") return null;
+        out.kind = kind;
+        const need = Math.max(1, Math.min(9, Math.round(Number(raw.need) || 0) || 0));
+        if (!(need > 0)) return null;
+        out.need = need;
+        if (kind === "kill" || kind === "clear") {
+          const mk = String(raw.mobKind || "").slice(0, 24);
+          try { if (!(window.CFG && window.CFG.MOB_TEMPLATES && window.CFG.MOB_TEMPLATES[mk])) return null; } catch (e) { return null; }
+          out.mobKind = mk;
+        } else {
+          const iid = String(raw.itemId || "").slice(0, 40);
+          try { if (!iid || !window.Items.ITEMS[iid]) return null; } catch (e) { return null; }
+          out.itemId = iid;
+          const fm = String(raw.fetchMob || "").slice(0, 24);
+          if (fm) {
+            try { if (!((window.CFG && window.CFG.MOB_TEMPLATES || {})[fm])) return null; } catch (e) { return null; }
+            out.fetchMob = fm;
+          }
+        }
+        if (raw.srcHint != null) out.srcHint = String(raw.srcHint).slice(0, 140);
+      }
+      out.title = String(raw.title || "A shared quest").slice(0, 48);
+      if (raw.desc != null) out.desc = String(raw.desc).slice(0, 220);
+      if (raw.story != null) out.story = String(raw.story).slice(0, 500);
+      if (raw.place != null) out.place = String(raw.place).slice(0, 48);
+      const t = (raw.t && typeof raw.t === "object") ? raw.t : null;
+      if (!t) return null;
+      const gx = Number(t.gx), gy = Number(t.gy);
+      if (!isFinite(gx) || !isFinite(gy) || Math.abs(gx) > 2000 || Math.abs(gy) > 2000) return null;
+      const tt = { gx, gy };
+      if (isFinite(Number(t.cx)) && Math.abs(Number(t.cx)) <= 200) tt.cx = Number(t.cx) | 0;
+      if (isFinite(Number(t.cy)) && Math.abs(Number(t.cy)) <= 200) tt.cy = Number(t.cy) | 0;
+      if (isFinite(Number(t.r))) tt.r = Math.max(4, Math.min(80, Number(t.r)));
+      if (t.placeName != null) tt.placeName = String(t.placeName).slice(0, 48);
+      if (t.name != null) tt.name = String(t.name).slice(0, 48);
+      if (t.dungeonId != null) tt.dungeonId = String(t.dungeonId).slice(0, 48);
+      if (t.houseTitle != null) tt.houseTitle = String(t.houseTitle).slice(0, 48);
+      if (t.biome != null) tt.biome = String(t.biome).slice(0, 24);
+      out.t = tt;
+      if (raw.giver && typeof raw.giver === "object") {
+        out.giver = {
+          name: String(raw.giver.name || "").slice(0, 40),
+          placeName: String(raw.giver.placeName || "").slice(0, 48),
+        };
+      }
+      return out;
+    } catch (e) { return null; }
+  }
+  // Build a share payload from one of my live quests/contracts, or null when
+  // it isn't shareable. ref: {sys:"v", id} or {sys:"g", gid}.
+  function buildQuestSharePayload(ref) {
+    try {
+      if (!ref || typeof ref !== "object") return null;
+      const G = window.Game && window.Game.G;
+      const p = (G && G.player) || (window.Game && window.Game.player);
+      if (!p) return null;
+      if (ref.sys === "v") {
+        const qs = (window.Quests && window.Quests.ensure) ? window.Quests.ensure(p) : [];
+        const q = (qs || []).find(x => x && x.id === ref.id && x.status === "active");
+        if (!q || (q.type !== "slay" && q.type !== "fetch" && q.type !== "clear")) return null;
+        return canonQuestSharePayload({
+          sys: "v", type: q.type, title: q.title, desc: q.desc, story: q.story,
+          mobKind: q.mobKind, itemId: q.itemId, need: q.need, diff: q.diff,
+          place: q.target && q.target.placeName,
+          t: q.target ? { gx: q.target.gx, gy: q.target.gy, cx: q.target.cx, cy: q.target.cy, placeName: q.target.placeName, name: q.target.name, dungeonId: q.target.dungeonId } : null,
+          giver: q.giver ? { name: q.giver.name, placeName: q.giver.placeName } : null,
+        });
+      }
+      if (ref.sys === "g") {
+        const act = (window.Guild && window.Guild.active) ? (window.Guild.active(p) || []) : [];
+        const q = (act || []).find(x => x && x.gid === ref.gid && x.status === "active");
+        if (!q || (q.kind !== "kill" && q.kind !== "clear" && q.kind !== "fetch") || q.commissionId) return null;
+        return canonQuestSharePayload({
+          sys: "g", kind: q.kind, title: q.title, desc: q.desc,
+          mobKind: q.mobKind, itemId: q.itemId, fetchMob: q.fetchMob, need: q.need,
+          srcHint: q.srcHint,
+          t: q.target ? { gx: q.target.gx, gy: q.target.gy, r: q.target.r, placeName: q.target.placeName, houseTitle: q.target.houseTitle, biome: q.target.biome } : null,
+        });
+      }
+      return null;
+    } catch (e) { return null; }
+  }
+  // Offer one of my quests to an ally. They choose from their log — nothing
+  // is forced. Only allies (mutual no-damage pact), never strangers.
+  function shareQuest(toHash, ref) {
+    try {
+      if (!M.active) return { ok: false, msg: "Not in multiplayer." };
+      toHash = String(toHash || "").toLowerCase();
+      if (!toHash || toHash === M.hash) return { ok: false, msg: "Bad ally." };
+      try { if (!M.remotes.has(toHash)) return { ok: false, msg: "That ally is gone." }; } catch (e) {}
+      if (!isAlliedHash(toHash)) return { ok: false, msg: "Only allies can share quests — ally first." };
+      const sq = buildQuestSharePayload(ref);
+      if (!sq) return { ok: false, msg: "That quest can't be shared." };
+      const shareId = "qs" + Math.random().toString(36).slice(2, 10);
+      try {
+        M.questShareSent.set(shareId, { to: toHash, ts: Date.now() });
+        if (M.questShareSent.size > 20) {
+          const fk = M.questShareSent.keys().next();
+          if (fk && !fk.done) M.questShareSent.delete(fk.value);
+        }
+      } catch (e) {}
+      broadcastNet({ t: "questShare", channelId: M.channelId, hash: M.hash, from: M.hash, to: toHash, shareId, q: sq }, { viaServer: true });
+      return { ok: true, shareId, toName: allyName(toHash), title: sq.title };
+    } catch (e) { return { ok: false, msg: "Share failed." }; }
+  }
+  // Incoming shares (prunes stale ones). The log UI renders accept/decline.
+  function questShareInbox() {
+    const out = [];
+    try {
+      const now = Date.now();
+      for (const [sid, s] of M.questShares) {
+        if (!s || now - (s.ts || 0) > 600000) { try { M.questShares.delete(sid); } catch (e) {} continue; }
+        out.push({ shareId: sid, from: s.from, fromName: s.fromName || allyName(s.from), q: s.q, ts: s.ts });
+      }
+      out.sort((a, b) => (a.ts || 0) - (b.ts || 0));
+    } catch (e) {}
+    return out;
+  }
+  // Answer an incoming share from the log. Accept builds my own copy via
+  // the quest systems; either way the sender hears back, and nothing about
+  // my log is revealed to them beyond take-it-or-leave-it.
+  async function questShareAnswer(shareId, accept) {
+    try {
+      shareId = String(shareId || "").slice(0, 16);
+      const s = M.questShares.get(shareId);
+      if (!s) return { ok: false, msg: "That share is gone." };
+      if (!accept) {
+        M.questShares.delete(shareId);
+        try { broadcastNet({ t: "questShareDecline", channelId: M.channelId, hash: M.hash, from: M.hash, to: s.from, shareId }, { viaServer: true }); } catch (e) {}
+        try { if (window.UI && window.UI.renderQuests) window.UI.renderQuests(); } catch (e) {}
+        return { ok: true, declined: true };
+      }
+      let r = null;
+      try {
+        if (s.q.sys === "g") {
+          r = window.Guild && window.Guild.acceptSharedContract ? window.Guild.acceptSharedContract(s.q, s.fromName) : { ok: false, msg: "No guildhall." };
+        } else {
+          r = window.Quests && window.Quests.acceptSharedQuest ? await window.Quests.acceptSharedQuest(s.q, s.fromName) : { ok: false, msg: "No quest log." };
+        }
+      } catch (e) { r = { ok: false, msg: "Couldn't take it up." }; }
+      if (!(r && r.ok)) return r;
+      M.questShares.delete(shareId);
+      try { broadcastNet({ t: "questShareTaken", channelId: M.channelId, hash: M.hash, from: M.hash, to: s.from, shareId, title: (r.quest && r.quest.title) || s.q.title }, { viaServer: true }); } catch (e) {}
+      try { if (window.UI && window.UI.renderQuests) window.UI.renderQuests(); } catch (e) {}
+      return r;
+    } catch (e) { return { ok: false, msg: "Couldn't answer that share." }; }
   }
   async function approveTrade() {
     const tr = M.trade;
@@ -5921,7 +6424,7 @@ window.MP = (() => {
     ensureSocket, createChannel, hostGame, joinChannel, joinGame, leaveChannel, endHostStream, handleHostEnded,
     saveNow, sendPos, sendEnts, sendDEnts, sendHit, sendDHit, sendDHurt, sendHurt, sendTaken, sendSnap, sendSnapPos, sendAct, sendPlayerHit, sendHitIntent, sendKillCredit, tickInterp, reportHit, syncSharedToGame, syncDungeonToGame, refreshPeers, setSleeping, reincarnate,
     packSnap,
-    getRemotes, getShared, getDShared, pushChat, pushSys, give, healPlayer, whisper, sendChannelChat, partyCap, setPartyMax, getChannelSettings, setChannelPartyMax, isAlliedHash, allyList, loadAllies, requestAlly, respondAlly, removeAlly, broadcastHellTowers, notifyPeterSlain, sendRevive, sendTame, tradeOffer, tradeCounter, tradeDeclineMsg, approveTrade,
+    getRemotes, getShared, getDShared, pushChat, pushSys, give, healPlayer, whisper, sendChannelChat, partyCap, setPartyMax, getChannelSettings, setChannelPartyMax, isAlliedHash, allyList, loadAllies, requestAlly, respondAlly, removeAlly, shareQuest, questShareInbox, questShareAnswer, broadcastHellTowers, notifyPeterSlain, sendRevive, sendTame, tradeOffer, tradeCounter, tradeDeclineMsg, approveTrade,
     sendGuild,
     notifyPoiLooted, applyPoiOp, applyCachedPois, notifyLooted, notifyDungeonPoi, applyDungeonPoiOp, applyCachedDPoi, notifyDungeonLoot, notifyFragmentClaimed, waitForInitialViewers,
     listChannelHeroes, deleteChannelHero,

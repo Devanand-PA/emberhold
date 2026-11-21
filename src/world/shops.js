@@ -1240,7 +1240,7 @@ window.Shops = (() => {
   // doubles per level from half price. ✏️ names one copy (free) — named and
   // worked pieces always list separately, even from identical kin.
   const UPGRADE_VENUE_NAME = { forge: "forge", arcane: "arcane circle", holy: "altar", dojo: "dojo" };
-  const UPGRADE_STAT_LABEL = { atk: "ATK", matk: "MATK", def: "DEF", sdef: "SDEF", maxHp: "HP", maxMp: "MP", maxStamina: "ST", spd: "SPD" };
+  const UPGRADE_STAT_LABEL = { atk: "ATK", matk: "MATK", def: "DEF", sdef: "SDEF", maxHp: "HP", maxMp: "MP", maxStamina: "ST", spd: "SPD", mpRegen: "MP/s", stRegen: "ST/s" };
   function upgradeStatLine(id, lvl) {
     try {
       const it = window.Items.ITEMS[id];
