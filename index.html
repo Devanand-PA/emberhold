@@ -1,3 +1,9 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Emberhold — Living World Dungeon Crawler</title>
+<!-- Keep the UTF-8 BOM above: it makes Chromium honor UTF-8 even when a host sends a legacy charset header. -->
 <style>
   html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #0d141b; font-family: "Trebuchet MS", Verdana, sans-serif; }
   body { text-align: left; -webkit-user-select: none; -moz-user-select: none; user-select: none; -webkit-touch-callout: none; }
@@ -1570,7 +1576,7 @@ try {
 
 <div class="modal" id="titleScreen" hidden>
   <div class="card title-wide">
-    <h1 class="title-logo"><img src="https://user.uploads.dev/file/f9426c2b790ba895aa0365dfa8265ac7.jpg" alt="Emberhold logo"><span class="title-text"><span class="title-main">Emberhold</span><span class="title-by">by thevoidis999</span></span></h1>
+    <h1 class="title-logo"><img src="assets/logo.jpg" alt="Emberhold logo"><span class="title-text"><span class="title-main">Emberhold</span><span class="title-by">by thevoidis999</span></span></h1>
     <p><b>A living world.</b> Every forest, ruin and stranger is woven as you walk —<br>and remembered by global coordinates, forever.</p>
     <div class="shotslides" id="shotSlides">
       <div class="strack">
@@ -1983,13 +1989,13 @@ try {
         <label class="hc-label">Name
           <input type="text" id="hcName" maxlength="16" placeholder="Wanderer" autocomplete="off">
         </label>
-        <label class="hc-label">Race
+        <div class="hc-label">Race
           <div class="hc-races" id="hcRaces"></div>
-        </label>
+        </div>
         <div id="hcRaceDesc"></div>
-        <label class="hc-label">Gender
+        <div class="hc-label">Gender
           <div class="hc-races" id="hcGenders"></div>
-        </label>
+        </div>
         <label class="hc-label">Outfit (any NPC style)
           <select id="hcOutfit"></select>
         </label>
@@ -2249,6 +2255,8 @@ try {
 
 <!-- load order matters (engine compat first, game before ui/codex, net last) -->
 <!-- core -->
+<script src="src/tauri-bridge.js"></script>
+<script src="src/update-check.js"></script>
 <script src="src/core/canvas_compat.js"></script>
 <script src="src/core/kv_local.js"></script>
 <script src="src/core/config.js"></script>
