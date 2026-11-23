@@ -187,39 +187,98 @@ window.LocalKv = (() => {
     }
   }
 
+  // ---------- disk shadow (WebKitGTK IDB fallback) ----------
+  // WebKitGTK — the engine Tauri uses on Linux, including AppImage builds —
+  // can silently lose IndexedDB writes: the slot saves, chunks and NPCs then
+  // vanish on reload (everything falls back to in-memory maps, so the game
+  // looks fine until it restarts). Every put therefore also mirrors the
+  // value to a per-key JSON file through the Rust commands (`kv_shadow_write`
+  // etc., to <app_data_dir>/localkv_shadow/<folder>/). Reads fall back to it
+  // when IndexedDB misses; where IndexedDB works, the shadow is a read
+  // fallback nothing reads. (Rust commands: src-tauri/src/lib.rs.)
+  let shadowInvoke = undefined; // undefined = unchecked, null = unavailable
+  function shadowInvoker() {
+    if (shadowInvoke !== undefined) return shadowInvoke;
+    shadowInvoke = null;
+    try {
+      const internals = window.__TAURI_INTERNALS__;
+      if (internals && typeof internals.invoke === "function") shadowInvoke = internals.invoke.bind(internals);
+    } catch (e) { }
+    return shadowInvoke;
+  }
+  function shadowCall(cmd, args) {
+    const fn = shadowInvoker();
+    if (!fn) return null;
+    try { return Promise.resolve(fn(cmd, args)); } catch (e) { return null; }
+  }
+  function shadowReadValue(folder, encKey) {
+    const p = shadowCall("kv_shadow_read", { folder: folder, key: encKey });
+    if (!p) return Promise.resolve(undefined);
+    return p.then(v => ((v === undefined || v === null) ? undefined : v)).catch(() => undefined);
+  }
+  function shadowWriteValue(folder, encKey, val) {
+    if (val === undefined) return Promise.resolve();
+    const p = shadowCall("kv_shadow_write", { folder: folder, key: encKey, data: val });
+    return p ? p.catch(() => { }) : Promise.resolve();
+  }
+  function shadowDeleteValue(folder, encKey) {
+    const p = shadowCall("kv_shadow_delete", { folder: folder, key: encKey });
+    return p ? p.catch(() => { }) : Promise.resolve();
+  }
+  function shadowEntries(folder) {
+    const p = shadowCall("kv_shadow_entries", { folder: folder });
+    if (!p) return Promise.resolve([]);
+    return p.then(list => (Array.isArray(list) ? list : [])).catch(() => []);
+  }
+
   // ---------- raw store ops (assume ensureReady already awaited) ----------
   async function storeGet(db, folder, key) {
     const fk = fullKey(folder, key);
-    if (memFallback || !db) return memMap.get(fk);
-    try {
-      const v = await req(db.transaction(STORE, "readonly").objectStore(STORE).get(fk));
-      // A put that failed IDB structured-clone sits only in memMap (storePut
-      // fallback). Prefer the IDB value, but don't hide the memMap one.
-      if (v === undefined && memMap.has(fk)) return memMap.get(fk);
-      return v;
+    if (memFallback || !db) {
+      // No IndexedDB (or it failed to open): the disk shadow is the store.
+      const sv = await shadowReadValue(folder, encKey(key));
+      return sv !== undefined ? sv : memMap.get(fk);
     }
-    catch (e) { return memMap.get(fk); }
+    let v;
+    try {
+      v = await req(db.transaction(STORE, "readonly").objectStore(STORE).get(fk));
+    } catch (e) { v = undefined; }
+    // IDB hit wins (as before). On a miss: the disk shadow — on WebKitGTK
+    // the IDB write can have been lost, and the shadow is the durable copy.
+    if (v !== undefined && v !== null) return v;
+    const sv = await shadowReadValue(folder, encKey(key));
+    if (sv !== undefined) return sv;
+    return memMap.get(fk);
   }
   async function storePut(db, folder, key, val) {
     const fk = fullKey(folder, key);
-    if (memFallback || !db) { memMap.set(fk, val); return; }
+    if (memFallback || !db) {
+      memMap.set(fk, val);
+      await shadowWriteValue(folder, encKey(key), val);
+      return;
+    }
     try {
       const tx = db.transaction(STORE, "readwrite");
       tx.objectStore(STORE).put(val, fk);
       await txDone(tx);
     } catch (e) { memMap.set(fk, val); }
+    // Mirror to the shadow even when the IDB put failed: WebKitGTK can lose
+    // those writes, and the file is what backs reads up on reload.
+    await shadowWriteValue(folder, encKey(key), val);
   }
   async function storeDel(db, folder, key) {
     const fk = fullKey(folder, key);
     memMap.delete(fk);
-    if (memFallback || !db) return;
-    try {
-      const tx = db.transaction(STORE, "readwrite");
-      tx.objectStore(STORE).delete(fk);
-      await txDone(tx);
-    } catch (e) {}
+    if (!(memFallback || !db)) {
+      try {
+        const tx = db.transaction(STORE, "readwrite");
+        tx.objectStore(STORE).delete(fk);
+        await txDone(tx);
+      } catch (e) {}
+    }
+    await shadowDeleteValue(folder, encKey(key));
   }
-  async function storeEntries(db, folder) {
+  async function storeEntriesIdb(db, folder) {
     if (memFallback || !db) {
       const out = [];
       const lo = folderPrefixLo(folder);
@@ -257,7 +316,21 @@ window.LocalKv = (() => {
         out.push([decKey(k.slice(lo.length)), vals[i]]);
       }
       return out;
-    } catch (e) { return storeEntries(null, folder); }
+    } catch (e) { return storeEntriesIdb(null, folder); }
+  }
+  // storeEntries merges the IDB entries with the disk shadow (WebKitGTK
+  // fallback). Shadow wins on conflict — both stores are written together on
+  // puts, so they agree unless the IDB write was the one that got lost.
+  async function storeEntries(db, folder) {
+    const idbOut = await storeEntriesIdb(db, folder);
+    const shadowPairs = await shadowEntries(folder);
+    if (!shadowPairs.length) return idbOut;
+    const m = new Map(idbOut.map(([k, v]) => [encKey(k), [k, v]]));
+    for (const pair of shadowPairs) {
+      if (!pair || !Array.isArray(pair) || typeof pair[0] !== "string") continue;
+      m.set(pair[0], [decKey(pair[0]), pair[1]]);
+    }
+    return [...m.values()];
   }
   async function storeKeys(db, folder) {
     const es = await storeEntries(db, folder);
