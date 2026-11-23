@@ -2324,6 +2324,17 @@ window.World = (() => {
     // them and regenerate below. The v11 migration normally wipes these
     // stores first; this is the belt-and-suspenders for any straggler.
     if (stored && ((stored.v | 0) || 0) < WORLD_GEN) stored = null;
+    // Worker-baked wilderness inside the origin hearth's reach is stale by
+    // construction: the worker mirror cannot know the player's spawn type
+    // (a city spawn owns radius 75, far past its ~40/56-tile origin bail),
+    // so it paved grass/water where walls and lawns belong. Drop those
+    // stored chunks and re-bake them on the main thread.
+    if (stored && stored._thread && dim === "surf") {
+      try {
+        const o = spawnSettlement();
+        if (Math.hypot(cx * CHUNK + 8 - o.cx, cy * CHUNK + 8 - o.cy) <= o.radius + 12) stored = null;
+      } catch (e) { }
+    }
     if (stored && !stored.dim) { try { stored.dim = "surf"; } catch (e) { } }
     // Slot moved on (switch / delete / new game) while we waited: hand back
     // the object without touching the new world's mem, stores, or AI queue.
@@ -2342,6 +2353,19 @@ window.World = (() => {
           if (!r) {
             try { r = await window.Threads.genChunkTiles(cx, cy, 1500); }
             catch (e) { r = null; }
+          }
+          // The worker mirror bails to main only within ~40/56 tiles of the
+          // origin, but the spawn hearth can be a city (radius 75): chunks
+          // in between would arrive as wilderness with no walls/lawns while
+          // the exterior overlay still draws houses over them. The origin
+          // hearth is main-thread ground — reject worker tiles it owns
+          // (center reach + 12 covers every tile of the chunk, half-diagonal
+          // ~11.3). Applies to prefetch-cache hits too.
+          if (r && !r.needsMain) {
+            try {
+              const o = spawnSettlement();
+              if (Math.hypot(cx * CHUNK + 8 - o.cx, cy * CHUNK + 8 - o.cy) <= o.radius + 12) r = null;
+            } catch (e) { }
           }
           if (r && !r.needsMain && r.tiles && r.tiles.length === CHUNK * CHUNK) {
             const prevDim = activeDim; activeDim = "surf";

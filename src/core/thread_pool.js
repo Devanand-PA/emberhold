@@ -202,8 +202,12 @@ function genChunk(cx, cy) {
   var gx0 = cx * CHUNK, gy0 = cy * CHUNK;
   var ccx = gx0 + 8, ccy = gy0 + 8;
   var dCenter = distOrigin(ccx, ccy);
-  // origin hearth + its outskirts always bake on the main thread
-  if (dCenter < 56) return { needsMain: true, reason: "origin" };
+  // origin hearth + its outskirts always bake on the main thread. The spawn
+  // hearth type lives on the player save (main thread only) and can be a
+  // city with radius 75 — the old 56-tile bail let workers pave wilderness
+  // over the spawn city's outer ring (40 < d <= 75), leaving houses without
+  // walls or lawns. 75 + chunk half-diagonal (~11.3) + margin = 90.
+  if (dCenter < 90) return { needsMain: true, reason: "origin" };
   // v19: workers bake the surface dimension only — surface towers pave on the
   // main thread, so any chunk near ANY tower (all 8 compass points) bails.
   // (Hell shares these coordinates but never reaches the worker path.)
