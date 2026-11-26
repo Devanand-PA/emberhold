@@ -83,18 +83,33 @@ window.Game = (() => {
       return A;
     } catch (e) { return null; }
   }
-  // Ground underlay for transparent overlay tiles (trees/lanterns): nearest
-  // ground-like neighbor tile id, so the canopy/post composites over whatever
-  // terrain it actually stands on (grass, sand, townstone...). Grass fallback
-  // when surrounded by more overlays/walls (deep forest).
+  // Ground underlay for transparent overlay tiles (trees/lanterns): the
+  // dominant ground-like terrain in the nearest occupied neighbor ring, so
+  // the canopy/post composites over whatever terrain it actually stands on
+  // (grass, sand, townstone...). Orthogonal neighbors are considered first
+  // and win ties; the old first-match scan let a lone diagonal sand tile
+  // replace a grass-rooted tree when felled. Rendering and felling share
+  // this lookup, so the revealed ground matches the underlay already shown.
+  // Grass fallback when surrounded by more overlays/walls (deep forest).
   function overlayBaseTile(gx, gy) {
     try {
       const GL = (window.Sprites && window.Sprites.GROUNDLIKE) || { 0: 1 };
-      for (let r = 1; r <= 3; r++) for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
-        if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
-        let t = -1;
-        try { t = tileAtGx(gx + dx, gy + dy); } catch (e) { t = -1; }
-        if (t != null && t >= 0 && GL[t]) return t;
+      for (let r = 1; r <= 3; r++) {
+        const counts = new Map();
+        for (let pass = 0; pass < 2; pass++) for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+          const orthogonal = dx === 0 || dy === 0;
+          if ((pass === 0) !== orthogonal) continue;
+          let t = -1;
+          try { t = tileAtGx(gx + dx, gy + dy); } catch (e) { t = -1; }
+          if (t == null || t < 0 || !GL[t]) continue;
+          counts.set(t, (counts.get(t) || 0) + 1);
+        }
+        let best = -1, bestCount = 0;
+        for (const [t, n] of counts) {
+          if (n > bestCount) { best = t; bestCount = n; }
+        }
+        if (best >= 0) return best;
       }
     } catch (e) { }
     return 0;
@@ -7852,7 +7867,15 @@ function dealDamage(src, tgt, amount, opts = {}) {
     } catch (e) { }
     // Never Ending Drive: unarmed lifesteal (killing blows feed it too).
     try { maybeNeverEndingDrive(src, dmg, opts); } catch (e) { }
-    if (tgt.hp <= 0) { tgt.hp = 0; try { trackTechKill(src, tgt, dmg, opts); } catch (eTrack) { } onKill(src, tgt); return dmg; }
+    if (tgt.hp <= 0) {
+      tgt.hp = 0;
+      try { trackTechKill(src, tgt, dmg, opts); } catch (eTrack) { }
+      // A killing blow is a landed weapon hit too. Credit it here before
+      // the early return; ordinary hits continue to creditTreeHit below.
+      try { creditTreeHit(src, opts.fam); } catch (eTree) { }
+      onKill(src, tgt);
+      return dmg;
+    }
     // beaten tamable beasts submit at their own random point below 25% HP
     try { maybeOfferTame(src, tgt); } catch (e) { }
     // retaliation: victim + guards remember the attacker (status ticks don't pick fights).
