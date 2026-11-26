@@ -91,7 +91,7 @@ window.Game = (() => {
   // replace a grass-rooted tree when felled. Rendering and felling share
   // this lookup, so the revealed ground matches the underlay already shown.
   // Grass fallback when surrounded by more overlays/walls (deep forest).
-  function overlayBaseTile(gx, gy) {
+  function dominantGroundTile(gx, gy) {
     try {
       const GL = (window.Sprites && window.Sprites.GROUNDLIKE) || { 0: 1 };
       for (let r = 1; r <= 3; r++) {
@@ -113,6 +113,67 @@ window.Game = (() => {
       }
     } catch (e) { }
     return 0;
+  }
+  // An overlay's underlay is a per-tile fact, not a function of its current
+  // neighbours: felling a neighbouring tree must not re-vote a standing
+  // tree's ground (a cleared neighbour can feed grass/sand into the ring and
+  // change it). Overlays cache {t: overlay tile id, u: ground underlay} on
+  // their chunk, so the answer is frozen while they stand. Felling clears
+  // the cache for its own cell; every other overlay keeps its cached ground.
+  function overlayUnderKey(lx, ly) { return lx + "," + ly; }
+  function overlayBaseTile(gx, gy) {
+    try {
+      const ch = chunkAt(gx, gy);
+      if (!ch) return 0;
+      const lx = Math.floor(gx - ch.cx * CHUNK), ly = Math.floor(gy - ch.cy * CHUNK);
+      const idx = ly * CHUNK + lx;
+      const cur = (ch.tiles && idx >= 0 && idx < ch.tiles.length) ? (ch.tiles[idx] | 0) : -1;
+      if (cur < 0) return 0;
+      ch.treeUnder = ch.treeUnder || {};
+      const key = overlayUnderKey(lx, ly);
+      const cached = ch.treeUnder[key];
+      try {
+        if (cached && cached.t === cur && window.Sprites.GROUNDLIKE[cached.u]) return cached.u;
+      } catch (e0) { }
+      const under = dominantGroundTile(gx, gy);
+      try {
+        if (cur >= 0 && window.Sprites.OVERLAY_TILES[cur] && window.Sprites.GROUNDLIKE[under]) {
+          ch.treeUnder[key] = { t: cur, u: under };
+        }
+      } catch (e1) { }
+      return under;
+    } catch (e) { }
+    return 0;
+  }
+  // Freeze underlays for every standing overlay in freshly-in-view chunks
+  // (called before felling), so a chop can never re-vote neighbours that
+  // have not been rendered on this machine yet.
+  function cacheOverlayUnderForChunk(ch) {
+    try {
+      if (!ch || !Array.isArray(ch.tiles) || ch.tiles.length !== CHUNK * CHUNK) return;
+      const OT = (window.Sprites && window.Sprites.OVERLAY_TILES) || null;
+      if (!OT) return;
+      ch.treeUnder = ch.treeUnder || {};
+      for (let ly = 0; ly < CHUNK; ly++) for (let lx = 0; lx < CHUNK; lx++) {
+        const idx = ly * CHUNK + lx;
+        const t = ch.tiles[idx] | 0;
+        if (!OT[t]) continue;
+        try { overlayBaseTile(ch.cx * CHUNK + lx, ch.cy * CHUNK + ly); } catch (e2) { }
+      }
+    } catch (e) { }
+  }
+  function cacheOverlayUnderAround(gx, gy, ringChunks) {
+    try {
+      ringChunks = ringChunks == null ? 1 : (ringChunks | 0);
+      const cxc = Math.floor(gx / CHUNK), cyc = Math.floor(gy / CHUNK);
+      for (let dy = -ringChunks; dy <= ringChunks; dy++) for (let dx = -ringChunks; dx <= ringChunks; dx++) {
+        const ch = G.chunks.get((cxc + dx) + "," + (cyc + dy));
+        if (ch) cacheOverlayUnderForChunk(ch);
+      }
+    } catch (e) { }
+  }
+  function clearOverlayUnderAt(ch, lx, ly) {
+    try { if (ch && ch.treeUnder) delete ch.treeUnder[overlayUnderKey(lx, ly)]; } catch (e) { }
   }
  // Draw one ground cell (variant-aware; overlays composite over an underlay).
  function drawGroundCell(g2, atl, t, gx, gy, dx, dy, ts) {
@@ -8559,10 +8620,14 @@ function dealDamage(src, tgt, amount, opts = {}) {
       }
     } catch (e) { }
    if (hp <= 0) {
+      // Freeze the standing trees' underlays BEFORE the tile changes: a
+      // just-felled neighbour must not re-vote their ground afterwards.
+      try { cacheOverlayUnderAround(hit.gx, hit.gy, 1); } catch (eCache) { }
       // Felling reveals the ground the tree stood on (dirt stays dirt, sand
       // stays sand) — same underlay lookup the ground bake composites.
       const fellT = overlayBaseTile(hit.gx, hit.gy);
       ch.tiles[ly * CHUNK + lx] = fellT;
+      try { clearOverlayUnderAt(ch, lx, ly); } catch (eClear) { }
       delete ch.treeHP[key];
       try { window.Items.addItem(att, "wood", 1); } catch (e) { }
       addDmgNum(hit.gx + 0.5, hit.gy, "+2 🪵", "#ffd93d");
@@ -8770,9 +8835,13 @@ function dealDamage(src, tgt, amount, opts = {}) {
       try { if (src && window.Items && window.Items.addItem) window.Items.addItem(src, "wood", 1); } catch (e2) {}
      addParticles(gx + 0.5, gy + 0.5, "#5da24a", 8);
      if (hp <= 0) {
+        // Freeze the standing trees' underlays BEFORE the tile changes: a
+        // just-felled neighbour must not re-vote their ground afterwards.
+        try { cacheOverlayUnderAround(gx, gy, 1); } catch (eCache) { }
         // Same as chopping: reveal the ground underneath, don't stamp grass.
         const fellT2 = overlayBaseTile(gx, gy);
         ch.tiles[ly * CHUNK + lx] = fellT2;
+        try { clearOverlayUnderAt(ch, lx, ly); } catch (eClear) { }
        delete ch.treeHP[key];
        try { if (src && window.Items && window.Items.addItem) window.Items.addItem(src, "wood", 1); } catch (e2) {}
         addDmgNum(gx + 0.5, gy, "+2 🪵", "#ffd93d");
